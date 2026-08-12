@@ -670,6 +670,7 @@ async def settings_page(request: Request):
     conn = get_db()
     admins = conn.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
     total_contacts = conn.execute("SELECT COUNT(*) FROM contacts").fetchone()[0]
+    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
     conn.close()
     
     return templates.TemplateResponse("settings.html", {
@@ -677,6 +678,7 @@ async def settings_page(request: Request):
         "user": user,
         "admins": [dict(a) for a in admins],
         "total_contacts": total_contacts,
+        "accounts": [dict(a) for a in accounts],
     })
 
 
@@ -716,6 +718,30 @@ async def delete_user(request: Request, user_id: int):
     conn.close()
     
     return RedirectResponse(url="/settings", status_code=302)
+
+
+@app.post("/settings/test_send")
+async def test_send(
+    request: Request,
+    account_phone: str = Form(...),
+    target_username: str = Form(...),
+    message_text: str = Form(...)
+):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    target_username = target_username.strip().lstrip("@")
+    if "t.me/" in target_username:
+        target_username = target_username.split("t.me/")[-1]
+    
+    try:
+        from sender_engine import send_test_async
+        send_test_async(account_phone, target_username, message_text)
+    except Exception:
+        pass
+    
+    return RedirectResponse(url="/settings?test=started", status_code=302)
 
 
 @app.get("/export/contacts")

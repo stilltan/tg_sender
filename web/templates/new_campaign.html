@@ -6,11 +6,13 @@
 <div class="card">
     <form method="POST" action="/campaigns/create">
         <div class="form-group"><label>Название</label><input type="text" name="name" placeholder="Рассылка рекрутерам" required></div>
-        <div class="form-group"><label>Шаблон</label>
+        <div class="form-group">
+            <label>Шаблон сообщения</label>
             <select name="template_id" required>
                 <option value="">Выберите шаблон...</option>
                 {% for t in templates %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
             </select>
+            <div style="color:var(--ink-tertiary);font-size:12px;margin-top:4px">При нескольких шаблонах — сообщения будут чередоваться случайно</div>
             {% if not templates %}<div style="color:var(--warning);font-size:12px;margin-top:6px">Сначала создайте шаблон в разделе <a href="/templates">Шаблоны</a></div>{% endif %}
         </div>
         <div class="form-group"><label>Группа контактов</label>
