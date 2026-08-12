@@ -310,6 +310,24 @@ async def delete_account(request: Request, account_id: int):
     
     return RedirectResponse(url="/accounts", status_code=302)
 
+
+@app.post("/accounts/unban_all")
+async def unban_all(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    import subprocess
+    try:
+        subprocess.Popen(
+            ["bash", "-c", "cd /opt/tg_sender && source venv/bin/activate && python3 tools/unban_accounts.py > /opt/tg_sender/data/unban_log.txt 2>&1 &"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    except Exception:
+        pass
+    
+    return RedirectResponse(url="/accounts?unban=started", status_code=302)
+
 @app.get("/api/accounts")
 async def api_accounts(request: Request):
     user = get_current_user(request)
