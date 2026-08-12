@@ -3,6 +3,7 @@ TG Sender — Telethon sending engine with MTProto proxy
 Supports: multiple templates, random selection, flood handling, single test send
 """
 import asyncio
+import os
 import sqlite3
 import random
 import time
@@ -16,8 +17,8 @@ DB_PATH = ROOT / "data" / "sender.db"
 SESSIONS_DIR = ROOT / "sessions"
 PROXY_CONF = ROOT / "proxy.conf"
 
-API_ID = 2040
-API_HASH = "b18441a1ff607e10a989891a5462e627"
+API_ID = int(os.environ.get("TG_SENDER_API_ID", "2040") or "2040")
+API_HASH = os.environ.get("TG_SENDER_API_HASH", "b18441a1ff607e10a989891a5462e627") or "b18441a1ff607e10a989891a5462e627"
 
 
 def get_proxy():
@@ -80,11 +81,11 @@ def get_contacts_for_campaign(campaign_id):
     return result, campaign
 
 
-def log_message(campaign_id, account_phone, contact_username, status, error=None):
+def log_message(campaign_id, account_id, contact_username, status, error=None):
     conn = get_db()
     conn.execute(
         "INSERT INTO message_log (campaign_id, account_id, contact_username, status, error_message) VALUES (?, ?, ?, ?, ?)",
-        (campaign_id, 0, contact_username, status, error)
+        (campaign_id, account_id, contact_username, status, error)
     )
     conn.commit()
     conn.close()
@@ -239,7 +240,7 @@ async def run_campaign(campaign_id):
 
         if ok:
             results["sent"] += 1
-            log_message(campaign_id, account["phone"], username, "sent")
+            log_message(campaign_id, account["id"], username, "sent")
             conn = get_db()
             conn.execute(
                 "UPDATE contacts SET status = 'contacted', last_contacted = ? WHERE id = ?",
@@ -250,7 +251,7 @@ async def run_campaign(campaign_id):
         elif "FLOOD" in str(error) or "PEER_FLOOD" in str(error):
             results["failed"] += 1
             results["errors"].append(f"{username}: {error}")
-            log_message(campaign_id, account["phone"], username, "flood_wait", error)
+            log_message(campaign_id, account["id"], username, "flood_wait", error)
             # Mark account as flooded
             flood_until[account["phone"]] = time.time() + flood_seconds
             # Try next account
@@ -259,7 +260,7 @@ async def run_campaign(campaign_id):
         else:
             results["failed"] += 1
             results["errors"].append(f"{username}: {error}")
-            log_message(campaign_id, account["phone"], username, "failed", error)
+            log_message(campaign_id, account["id"], username, "failed", error)
 
         messages_on_current += 1
         update_campaign_progress(campaign_id)

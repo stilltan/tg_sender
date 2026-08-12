@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Журнал — TG Sender{% endblock %}
+{% block header %}🛡 Журнал действий{% endblock %}
+{% block content %}
+<div class="card">
+    <p style="color:var(--ink-tertiary);margin-bottom:12px">
+        Кто и когда заходил в панель и что делал (последние 100 записей) — для безопасности.
+    </p>
+    <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+                <tr style="text-align:left;color:var(--ink-tertiary);border-bottom:1px solid var(--border)">
+                    <th style="padding:8px">Когда</th>
+                    <th style="padding:8px">Кто</th>
+                    <th style="padding:8px">Действие</th>
+                    <th style="padding:8px">Детали</th>
+                    <th style="padding:8px">IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for it in items %}
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:8px;white-space:nowrap">{{ it.created_at }}</td>
+                    <td style="padding:8px"><b>{{ it.username or "—" }}</b></td>
+                    <td style="padding:8px">{{ it.action }}</td>
+                    <td style="padding:8px">{{ it.detail or "" }}</td>
+                    <td style="padding:8px;color:var(--ink-tertiary)">{{ it.ip or "" }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="padding:14px;color:var(--ink-tertiary)">Записей пока нет</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
