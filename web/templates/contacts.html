@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% set active = "contacts" %}
+{% block title %}TG Sender — Контакты{% endblock %}
+{% block header %}Контакты <span style="color:var(--ink-tertiary);font-size:14px;font-weight:400">({{ total }})</span>{% endblock %}
+{% block header_right %}
+<div style="display:flex;gap:8px">
+    <button class="btn btn-primary" onclick="document.getElementById('addModal').classList.add('show')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        Добавить
+    </button>
+    <button class="btn btn-ghost" onclick="document.getElementById('importModal').classList.add('show')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        Импорт
+    </button>
+</div>
+{% endblock %}
+{% block content %}
+<div class="filters">
+    <a href="/contacts?group=all" class="filter-btn {% if current_group == 'all' %}active{% endif %}">Все ({{ total }})</a>
+    {% for g in groups %}
+    <a href="/contacts?group={{ g }}" class="filter-btn {% if current_group == g %}active{% endif %}">{{ g }}</a>
+    {% endfor %}
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Username</th><th>Имя</th><th>Группа</th><th>Статус</th><th>Действия</th></tr></thead>
+        <tbody>
+        {% for c in contacts %}
+        <tr>
+            <td><a href="https://t.me/{{ c.username }}" target="_blank" style="color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:6px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+                @{{ c.username }}
+            </a></td>
+            <td>{{ c.name or '-' }}</td>
+            <td><span style="font-size:12px;color:var(--ink-subtle)">{{ c.group_name }}</span></td>
+            <td><span class="badge {{ c.status }}">{{ c.status }}</span></td>
+            <td>
+                <div style="display:flex;gap:4px">
+                    <button class="btn-icon" title="Написали" onclick="setStatus({{ c.id }},'contacted')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    </button>
+                    <button class="btn-icon" title="Не заинтересован" onclick="setStatus({{ c.id }},'not_interest')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+                    </button>
+                    <button class="btn-icon" title="Заблокировал" onclick="setStatus({{ c.id }},'blocked')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" x2="19.07" y1="4.93" y2="19.07"/></svg>
+                    </button>
+                    <form method="POST" action="/contacts/{{ c.id }}/delete" style="display:inline" onsubmit="return confirm('Удалить?')">
+                        <button type="submit" class="btn-icon" title="Удалить">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-tertiary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        </button>
+                    </form>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div id="addModal" class="modal">
+    <div class="modal-content">
+        <h2>Добавить контакт</h2>
+        <form method="POST" action="/contacts/add">
+            <div class="form-group"><label>Username</label><input type="text" name="username" placeholder="@username" required></div>
+            <div class="form-group"><label>Имя</label><input type="text" name="name" placeholder="Имя"></div>
+            <div class="form-group"><label>Описание</label><input type="text" name="description" placeholder="Описание"></div>
+            <div class="form-group"><label>Группа</label><input type="text" name="group" value="default"></div>
+            <div style="display:flex;gap:12px;margin-top:20px">
+                <button type="submit" class="btn btn-primary">Добавить</button>
+                <button type="button" class="btn btn-ghost" onclick="this.closest('.modal').classList.remove('show')">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="importModal" class="modal">
+    <div class="modal-content">
+        <h2>Импорт контактов</h2>
+        <form method="POST" action="/contacts/import">
+            <div class="form-group">
+                <label>Контакты (каждый с новой строки: @username | Имя | Описание)</label>
+                <textarea name="contacts_text" rows="10" placeholder="@user1 | Имя 1 | Описание 1&#10;@user2 | Имя 2 | Описание 2"></textarea>
+            </div>
+            <div class="form-group"><label>Группа</label><input type="text" name="group" value="imported"></div>
+            <div style="display:flex;gap:12px;margin-top:20px">
+                <button type="submit" class="btn btn-primary">Импортировать</button>
+                <button type="button" class="btn btn-ghost" onclick="this.closest('.modal').classList.remove('show')">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function setStatus(id,status){fetch(`/contacts/${id}/status`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`status=${status}`}).then(()=>location.reload())}
+document.querySelectorAll('.modal').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show')})});
+</script>
+{% endblock %}

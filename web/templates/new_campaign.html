@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% set active = "campaigns" %}
+{% block title %}TG Sender — Новая рассылка{% endblock %}
+{% block header %}Новая рассылка{% endblock %}
+{% block content %}
+<div class="card">
+    <form method="POST" action="/campaigns/create">
+        <div class="form-group"><label>Название</label><input type="text" name="name" placeholder="Рассылка рекрутерам" required></div>
+        <div class="form-group"><label>Шаблон</label>
+            <select name="template_id" required>
+                <option value="">Выберите шаблон...</option>
+                {% for t in templates %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+            </select>
+            {% if not templates %}<div style="color:var(--warning);font-size:12px;margin-top:6px">Сначала создайте шаблон в разделе <a href="/templates">Шаблоны</a></div>{% endif %}
+        </div>
+        <div class="form-group"><label>Группа контактов</label>
+            <select name="contact_group">
+                <option value="all">Все контакты</option>
+                {% for g in groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Мин. задержка (сек)</label><input type="number" name="delay_min" value="30" min="10"></div>
+            <div class="form-group"><label>Макс. задержка (сек)</label><input type="number" name="delay_max" value="60" min="10"></div>
+        </div>
+        <div class="form-group"><label>Сообщений с одного аккаунта</label><input type="number" name="messages_per_account" value="20" min="1" max="50"><div style="color:var(--ink-tertiary);font-size:12px;margin-top:4px">После лимита переключится на следующий аккаунт</div></div>
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:12px 24px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+            Создать рассылку
+        </button>
+    </form>
+</div>
+{% endblock %}

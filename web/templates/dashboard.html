@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% set active = "dashboard" %}
+{% block title %}TG Sender — Дашборд{% endblock %}
+{% block header %}Дашборд{% endblock %}
+{% block header_right %}<span style="color:var(--ink-subtle);font-size:13px">{{ user.username }}</span>{% endblock %}
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card accent">
+        <div class="icon-wrap"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div class="label">Контакты</div>
+        <div class="value">{{ stats.total_contacts }}</div>
+        <div class="sub">Активных: {{ stats.active_contacts }}</div>
+    </div>
+    <div class="stat-card success">
+        <div class="icon-wrap"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></div>
+        <div class="label">Аккаунты</div>
+        <div class="value">{{ stats.total_accounts }}</div>
+        <div class="sub">Активных: {{ stats.active_accounts }}</div>
+    </div>
+    <div class="stat-card warning">
+        <div class="icon-wrap"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div>
+        <div class="label">Рассылки</div>
+        <div class="value">{{ stats.total_campaigns }}</div>
+        <div class="sub">Запущено: {{ stats.running_campaigns }}</div>
+    </div>
+    <div class="stat-card" style="--value-color:var(--accent-2)">
+        <div class="icon-wrap"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg></div>
+        <div class="label">Отправлено</div>
+        <div class="value" style="color:var(--accent-2)">{{ stats.total_sent }}</div>
+        <div class="sub">Написано: {{ stats.contacted }}</div>
+    </div>
+</div>
+
+<h2 style="font-size:15px;margin-bottom:16px;font-weight:600;color:var(--ink-subtle)">Быстрые действия</h2>
+<div class="quick-actions">
+    <a href="/accounts" class="quick-action">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+        <span>Аккаунты</span>
+    </a>
+    <a href="/contacts" class="quick-action">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Импорт контактов</span>
+    </a>
+    <a href="/templates" class="quick-action">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+        <span>Шаблоны</span>
+    </a>
+    <a href="/campaigns/new" class="quick-action">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+        <span>Новая рассылка</span>
+    </a>
+</div>
+
+<div class="card">
+    <h2>Последние рассылки</h2>
+    {% if campaigns %}
+    <table>
+        <thead><tr><th>Название</th><th>Статус</th><th>Прогресс</th><th>Отправлено</th><th>Дата</th></tr></thead>
+        <tbody>
+        {% for c in campaigns %}
+        <tr>
+            <td><strong>{{ c.name }}</strong></td>
+            <td><span class="badge {{ c.status }}">{{ c.status }}</span></td>
+            <td><div class="progress"><div class="bar" style="width:{{ (c.sent_count / c.total_contacts * 100) if c.total_contacts > 0 else 0 }}%"></div></div></td>
+            <td>{{ c.sent_count }}</td>
+            <td style="color:var(--ink-tertiary)">{{ c.created_at[:10] if c.created_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--ink-tertiary);text-align:center;padding:40px">Пока нет рассылок. <a href="/campaigns/new">Создать первую</a></p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#09090b">
+    <meta name="color-scheme" content="dark">
+    <title>TG Sender — Вход</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="bg-fx" aria-hidden="true">
+        <div class="orb orb-a"></div>
+        <div class="orb orb-b"></div>
+        <div class="orb orb-c"></div>
+        <div class="grid-fx"></div>
+    </div>
+    <div style="position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">
+        <div class="card" style="max-width:400px;width:100%">
+            <div style="text-align:center;margin-bottom:32px">
+                <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,var(--accent),var(--accent-3));display:grid;place-items:center;box-shadow:0 0 0 1px rgba(255,255,255,.1),0 8px 32px var(--accent-glow)">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+                </div>
+                <h1 style="font-size:24px;font-weight:700;letter-spacing:-0.03em;margin-bottom:4px">TG Sender</h1>
+                <p style="color:var(--ink-tertiary);font-size:14px">Система рассылки сообщений</p>
+            </div>
+            {% if error %}
+            <div style="background:var(--danger-soft);color:var(--danger);padding:12px;border-radius:var(--r-sm);margin-bottom:20px;text-align:center;font-size:14px">{{ error }}</div>
+            {% endif %}
+            <form method="POST" action="/login">
+                <div class="form-group">
+                    <label>Логин</label>
+                    <div style="position:relative">
+                        <svg style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-tertiary)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <input type="text" name="username" placeholder="admin" required autofocus style="padding-left:38px">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <div style="position:relative">
+                        <svg style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-tertiary)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <input type="password" name="password" placeholder="••••••••" required style="padding-left:38px">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;font-size:15px;padding:12px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
+                    Войти
+                </button>
+            </form>
+            <p style="text-align:center;margin-top:20px;color:var(--ink-tertiary);font-size:12px">admin / admin123</p>
+        </div>
+    </div>
+</body>
+</html>
