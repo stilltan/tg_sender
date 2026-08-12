@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% set active = "settings" %}
+{% block title %}TG Sender — Настройки{% endblock %}
+{% block header %}Настройки{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Аккаунт</h2>
+    <div class="info-row"><span class="info-label">Логин</span><span class="info-value">{{ user.username }}</span></div>
+    <div class="info-row"><span class="info-label">Роль</span><span class="info-value">{% if user.is_admin %}Администратор{% else %}Пользователь{% endif %}</span></div>
+</div>
+
+<div class="card">
+    <h2 style="display:flex;align-items:center;gap:8px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        Тест отправки
+    </h2>
+    <p style="color:var(--ink-tertiary);font-size:13px;margin-bottom:16px">Отправьте одно сообщение конкретному человеку для проверки</p>
+    
+    <form method="POST" action="/settings/test_send">
+        <div class="form-group">
+            <label>Аккаунт (отправитель)</label>
+            <select name="account_phone" required>
+                {% for a in accounts %}
+                <option value="{{ a.phone }}">{{ a.phone }} {% if a.name %}({{ a.name }}){% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Получатель (username)</label>
+            <input type="text" name="target_username" placeholder="@username или Cursdworld" required>
+        </div>
+        <div class="form-group">
+            <label>Текст сообщения</label>
+            <textarea name="message_text" rows="4" placeholder="Тестовое сообщение..." required>Привет! Это тестовое сообщение от TG Sender.</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+            Отправить тест
+        </button>
+    </form>
+</div>
+
+<div class="card">
+    <h2 style="display:flex;align-items:center;gap:8px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Пользователи
+    </h2>
+    <p style="color:var(--ink-tertiary);font-size:13px;margin-bottom:16px">Добавьте других пользователей для доступа к системе</p>
+    
+    <form method="POST" action="/settings/add_user" style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+        <input type="text" name="username" placeholder="Логин" required style="flex:1;min-width:120px">
+        <input type="password" name="password" placeholder="Пароль" required style="flex:1;min-width:120px">
+        <button type="submit" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            Добавить
+        </button>
+    </form>
+    
+    {% if admins %}
+    <table>
+        <thead><tr><th>Логин</th><th>Роль</th><th>Дата</th><th></th></tr></thead>
+        <tbody>
+        {% for a in admins %}
+        <tr>
+            <td><strong>{{ a.username }}</strong></td>
+            <td><span class="badge {% if a.is_admin %}active{% else %}draft{% endif %}">{% if a.is_admin %}Админ{% else %}Юзер{% endif %}</span></td>
+            <td style="color:var(--ink-tertiary)">{{ a.created_at[:10] if a.created_at else '-' }}</td>
+            <td>
+                {% if a.id != user.id %}
+                <form method="POST" action="/settings/delete_user/{{ a.id }}" style="display:inline" onsubmit="return confirm('Удалить {{ a.username }}?')">
+                    <button type="submit" class="btn-icon" title="Удалить">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    </button>
+                </form>
+                {% else %}
+                <span style="color:var(--ink-tertiary);font-size:12px">Вы</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Система</h2>
+    <div class="info-row"><span class="info-label">Сервер</span><span class="info-value">158.160.6.22</span></div>
+    <div class="info-row"><span class="info-label">Прокси</span><span class="info-value">MTProto 94.130.191.53:8443</span></div>
+    <div class="info-row"><span class="info-label">Контактов</span><span class="info-value">{{ total_contacts }}</span></div>
+</div>
+
+<div class="card">
+    <h2>Экспорт</h2>
+    <a href="/export/contacts" class="btn btn-ghost">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        Скачать CSV ({{ total_contacts }} контактов)
+    </a>
+</div>
+{% endblock %}

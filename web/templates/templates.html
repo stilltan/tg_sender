@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set active = "templates" %}
+{% block title %}TG Sender — Шаблоны{% endblock %}
+{% block header %}Шаблоны <span style="color:var(--ink-tertiary);font-size:14px;font-weight:400">({{ templates|length }})</span>{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Новый шаблон</h2>
+    <form method="POST" action="/templates/add">
+        <div class="form-group"><label>Название</label><input type="text" name="name" placeholder="Например: Приветствие рекрутеру" required></div>
+        <div class="form-group">
+            <label>Текст сообщения</label>
+            <textarea name="text" rows="5" placeholder="Привет, {name}! ..." required></textarea>
+            <div style="color:var(--ink-tertiary);font-size:12px;margin-top:4px">Переменные: <code>{name}</code> — имя контакта, <code>{username}</code> — юзернейм</div>
+        </div>
+        <button type="submit" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            Создать
+        </button>
+    </form>
+</div>
+
+{% for t in templates %}
+<div class="card template-item">
+    <div style="display:flex;justify-content:space-between;align-items:start">
+        <h3 style="margin-bottom:8px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;opacity:0.5"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+            {{ t.name }}
+        </h3>
+        <form method="POST" action="/templates/{{ t.id }}/delete" onsubmit="return confirm('Удалить шаблон?')">
+            <button type="submit" class="btn-icon" title="Удалить">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
+        </form>
+    </div>
+    <div class="text">{{ t.text }}</div>
+</div>
+{% endfor %}
+
+{% if not templates %}
+<div class="card" style="text-align:center;color:var(--ink-tertiary);padding:60px">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:16px;opacity:0.3"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+    <p>Пока нет шаблонов</p>
+    <p style="font-size:13px;margin-top:8px">Создайте несколько шаблонов — сообщения будут чередоваться при рассылке</p>
+</div>
+{% endif %}
+{% endblock %}

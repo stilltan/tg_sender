@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% set active = "accounts" %}
+{% block title %}TG Sender — Аккаунты{% endblock %}
+{% block header %}Аккаунты{% endblock %}
+{% block header_right %}
+<div style="display:flex;gap:8px">
+    <button class="btn btn-primary" onclick="document.getElementById('addModal').classList.add('show')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        Добавить
+    </button>
+    <form method="POST" action="/accounts/unban_all" style="display:inline">
+        <button type="submit" class="btn btn-ghost" onclick="return confirm('Попытаться снять спам-блоки через @SpamBot?')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Снять блоки
+        </button>
+    </form>
+</div>
+{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Telegram аккаунты</h2>
+    <p style="color:var(--ink-tertiary);margin-bottom:16px;font-size:14px">Добавьте рабочие аккаунты для рассылки. API ID/Hash: <a href="https://my.telegram.org" target="_blank">my.telegram.org</a></p>
+    {% if accounts %}
+    <table>
+        <thead><tr><th>Телефон</th><th>Статус</th><th>Отправлено</th><th>Действия</th></tr></thead>
+        <tbody>
+        {% for a in accounts %}
+        <tr>
+            <td><strong>{{ a.phone }}</strong></td>
+            <td><span class="badge {{ a.status }}">{{ a.status }}</span></td>
+            <td>{{ a.messages_sent }}</td>
+            <td>
+                <form method="POST" action="/accounts/{{ a.id }}/delete" style="display:inline" onsubmit="return confirm('Удалить?')">
+                    <button type="submit" class="btn btn-ghost" style="padding:4px 10px;font-size:12px">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    </button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--ink-tertiary);text-align:center;padding:40px">Нет аккаунтов. Нажмите «Добавить».</p>
+    {% endif %}
+</div>
+
+<div id="addModal" class="modal">
+    <div class="modal-content">
+        <h2 style="display:flex;align-items:center;gap:10px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+            Добавить аккаунт
+        </h2>
+        <form method="POST" action="/accounts/add">
+            <div class="form-group"><label>Телефон</label><input type="text" name="phone" placeholder="+79001234567" required></div>
+            <div class="form-row">
+                <div class="form-group"><label>API ID</label><input type="number" name="api_id" placeholder="12345678" required></div>
+                <div class="form-group"><label>API Hash</label><input type="text" name="api_hash" placeholder="abcdef1234567890" required></div>
+            </div>
+            <div style="display:flex;gap:12px;margin-top:20px">
+                <button type="submit" class="btn btn-primary">Добавить</button>
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('addModal').classList.remove('show')">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>document.getElementById('addModal').addEventListener('click',e=>{if(e.target===e.currentTarget)e.target.classList.remove('show')})</script>
+{% endblock %}

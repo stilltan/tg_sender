@@ -38,3 +38,13 @@ Thumbs.db
 # Credentials
 credentials.json
 *.json
+
+# TG Sender data (секреты и личные данные — НЕ коммитить)
+accounts/
+sessions/
+*.session
+backups/
+uploads/*.csv
+proxy.conf
+.admin_credentials
+*.bak*

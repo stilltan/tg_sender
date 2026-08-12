@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set active = "campaigns" %}
+{% block title %}TG Sender — Рассылки{% endblock %}
+{% block header %}Рассылки{% endblock %}
+{% block header_right %}<a href="/campaigns/new" class="btn btn-primary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg> Новая</a>{% endblock %}
+{% block content %}
+{% if campaigns %}
+<div class="card">
+    <table>
+        <thead><tr><th>Название</th><th>Статус</th><th>Прогресс</th><th>Отправлено</th><th>Ошибок</th><th>Действия</th></tr></thead>
+        <tbody>
+        {% for c in campaigns %}
+        <tr>
+            <td><strong>{{ c.name }}</strong></td>
+            <td><span class="badge {{ c.status }}">{{ c.status }}</span></td>
+            <td><div class="progress" style="width:80px"><div class="bar" style="width:{{ (c.sent_count / c.total_contacts * 100) if c.total_contacts > 0 else 0 }}%"></div></div><small>{{ c.sent_count }}/{{ c.total_contacts }}</small></td>
+            <td>{{ c.sent_count }}</td>
+            <td>{{ c.failed_count }}</td>
+            <td>
+                <div style="display:flex;gap:4px">
+                    {% if c.status == 'draft' or c.status == 'paused' %}
+                    <button class="btn-icon" title="Запустить" onclick="startC({{ c.id }})"><svg width="16" height="16" viewBox="0 0 24 24" fill="var(--success)" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+                    {% elif c.status == 'running' %}
+                    <button class="btn-icon" title="Пауза" onclick="pauseC({{ c.id }})"><svg width="16" height="16" viewBox="0 0 24 24" fill="var(--warning)" stroke="none"><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></svg></button>
+                    {% endif %}
+                    <form method="POST" action="/campaigns/{{ c.id }}/delete" style="display:inline" onsubmit="return confirm('Удалить?')"><button type="submit" class="btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/></svg></button></form>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;color:var(--ink-tertiary);padding:60px">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:16px;opacity:0.3"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+    <p>Пока нет рассылок</p>
+    <a href="/campaigns/new" class="btn btn-primary" style="margin-top:16px">Создать первую</a>
+</div>
+{% endif %}
+<script>function startC(id){fetch(`/campaigns/${id}/start`,{method:'POST'}).then(()=>location.reload())}function pauseC(id){fetch(`/campaigns/${id}/pause`,{method:'POST'}).then(()=>location.reload())}</script>
+{% endblock %}

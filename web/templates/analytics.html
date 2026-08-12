@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set active = "analytics" %}
+{% block title %}TG Sender — Аналитика{% endblock %}
+{% block header %}Аналитика{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Отправлено за 30 дней</h2>
+    {% set max_sent = daily_stats|map(attribute='sent')|max if daily_stats else 1 %}
+    <div class="chart-bar">
+        {% for d in daily_stats %}
+        <div class="bar" style="height:{{ (d.sent / max_sent * 180) if max_sent > 0 else 0 }}px" title="{{ d.date }}: {{ d.sent }}"><span class="bar-label">{{ d.date[5:] }}</span></div>
+        {% endfor %}
+    </div>
+</div>
+<div class="card">
+    <h2>Производительность аккаунтов</h2>
+    {% if accounts %}
+    <table>
+        <thead><tr><th>Телефон</th><th>Статус</th><th>Отправлено</th><th>Ошибок</th></tr></thead>
+        <tbody>
+        {% for a in accounts %}
+        <tr><td>{{ a.phone }}</td><td><span class="badge {{ a.status }}">{{ a.status }}</span></td><td>{{ a.sent or 0 }}</td><td>{{ a.failed or 0 }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--ink-tertiary);text-align:center;padding:20px">Нет аккаунтов</p>
+    {% endif %}
+</div>
+{% endblock %}
