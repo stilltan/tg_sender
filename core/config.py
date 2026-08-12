@@ -42,6 +42,9 @@ ADMIN_GROUP_ID = (
 
 DB_PATH = Path(os.environ.get("TG_SENDER_DB_PATH", str(DEFAULT_DB_PATH)))
 
+# Telegram API proxy (Cloudflare Worker or other proxy for blocked regions)
+BOT_API_BASE_URL = os.environ.get("BOT_API_BASE_URL", "").strip()
+
 # FSM states
 STATE_IDLE = 0
 STATE_WAITING_MESSAGE = 1

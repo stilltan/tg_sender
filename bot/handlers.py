@@ -28,7 +28,8 @@ from core import db
 from bot.config import (
     BOT_TOKEN, SUPER_ADMIN_ID, ADMIN_GROUP_ID,
     STATE_IDLE, STATE_WAITING_MESSAGE, STATE_WAITING_DELAY,
-    STATE_WAITING_CONTACT, STATE_IMPORTING
+    STATE_WAITING_CONTACT, STATE_IMPORTING,
+    BOT_API_BASE_URL
 )
 from bot.keyboards import (
     build_main_menu, build_contacts_menu, build_contact_actions,
@@ -902,6 +903,8 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 def create_application() -> Application:
     """Create and configure the bot application."""
+    import os
+    
     # Initialize database
     db.init_db()
     
@@ -909,8 +912,20 @@ def create_application() -> Application:
     if SUPER_ADMIN_ID:
         db.add_admin(SUPER_ADMIN_ID, is_super=True)
     
-    # Create application
-    application = Application.builder().token(BOT_TOKEN).build()
+    # Create application with proxy support
+    builder = Application.builder().token(BOT_TOKEN)
+    
+    # Telegram API proxy (for blocked regions like Russia)
+    api_base = BOT_API_BASE_URL
+    if api_base:
+        if not api_base.endswith("/bot"):
+            api_base = api_base.rstrip("/") + "/bot"
+        file_base = os.environ.get("BOT_API_FILE_BASE_URL", "").strip().rstrip("/")
+        if not file_base:
+            file_base = api_base[:-len("/bot")] + "/file/bot"
+        builder = builder.base_url(api_base).base_file_url(file_base)
+    
+    application = builder.build()
     
     # Command handlers
     application.add_handler(CommandHandler("start", cmd_start))

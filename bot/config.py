@@ -15,6 +15,7 @@ from core import config as core_config  # noqa: E402
 BOT_TOKEN = core_config.BOT_TOKEN
 SUPER_ADMIN_ID = core_config.SUPER_ADMIN_ID
 ADMIN_GROUP_ID = core_config.ADMIN_GROUP_ID
+BOT_API_BASE_URL = core_config.BOT_API_BASE_URL
 
 # FSM states
 STATE_IDLE = core_config.STATE_IDLE
