@@ -1,12 +1,13 @@
 """
 TG Sender — Telethon sending engine with MTProto proxy
-Supports: multiple templates, random selection, flood handling, single test send
+Full anti-spam protection: spintax, smart delays, daily limits, flood handling
 """
 import asyncio
 import os
 import sqlite3
 import random
 import time
+import re
 from datetime import datetime
 from pathlib import Path
 from telethon import TelegramClient
@@ -21,6 +22,177 @@ API_ID = int(os.environ.get("TG_SENDER_API_ID", "2040") or "2040")
 API_HASH = os.environ.get("TG_SENDER_API_HASH", "b18441a1ff607e10a989891a5462e627") or "b18441a1ff607e10a989891a5462e627"
 
 
+# ============================================================
+# SPINTAX ENGINE
+# ============================================================
+
+def spintax(text: str) -> str:
+    """Process spintax: {option1|option2|option3} -> random choice."""
+    def replace(match):
+        options = match.group(1).split('|')
+        return random.choice(options)
+    
+    for _ in range(5):
+        new_text = re.sub(r'\{([^{}]+)\}', replace, text)
+        if new_text == text:
+            break
+        text = new_text
+    
+    return text
+
+
+def generate_unique_text(template: str, name: str = "", username: str = "") -> str:
+    """Generate unique text from spintax template."""
+    text = spintax(template)
+    text = text.replace("{name}", name or username)
+    text = text.replace("{username}", username)
+    return text.strip()
+
+
+# ============================================================
+# SMART DELAYS
+# ============================================================
+
+def get_smart_delay(account_age_days: int, messages_today: int, is_first: bool = False) -> float:
+    """Smart random delay based on account age and activity."""
+    if account_age_days < 7:
+        base_min, base_max = 180, 600
+    elif account_age_days < 14:
+        base_min, base_max = 120, 420
+    elif account_age_days < 30:
+        base_min, base_max = 90, 300
+    elif account_age_days < 90:
+        base_min, base_max = 60, 180
+    else:
+        base_min, base_max = 45, 150
+    
+    if is_first:
+        base_min *= 1.5
+        base_max *= 2.0
+    
+    if messages_today > 20:
+        base_min *= 1.3
+        base_max *= 1.5
+    elif messages_today > 10:
+        base_min *= 1.1
+        base_max *= 1.2
+    
+    delay = random.uniform(base_min, base_max)
+    
+    # 5% chance of long pause
+    if random.random() < 0.05:
+        delay += random.uniform(600, 1800)
+    
+    # 2% chance of very long pause
+    if random.random() < 0.02:
+        delay += random.uniform(1800, 3600)
+    
+    return delay
+
+
+def get_typing_delay(text_length: int) -> float:
+    """Simulate typing time."""
+    base = text_length / 3.3
+    return min(base * random.uniform(0.7, 1.3), 30)
+
+
+# ============================================================
+# DAILY LIMITS
+# ============================================================
+
+LIMITS_BY_AGE = {
+    0: 3, 3: 5, 7: 8, 14: 12, 30: 20, 60: 30, 90: 40, 180: 60, 365: 80,
+}
+
+
+def get_daily_limit(age_days: int) -> int:
+    limit = 3
+    for threshold, val in sorted(LIMITS_BY_AGE.items()):
+        if age_days >= threshold:
+            limit = val
+    return limit
+
+
+def get_account_age_days(created_at: str) -> int:
+    if not created_at:
+        return 0
+    try:
+        created = datetime.fromisoformat(created_at.split('+')[0])
+        return (datetime.now() - created).days
+    except Exception:
+        return 0
+
+
+def get_messages_today(account_id: int) -> int:
+    conn = get_db()
+    today = datetime.now().strftime("%Y-%m-%d")
+    count = conn.execute(
+        "SELECT COUNT(*) FROM message_log WHERE account_id = ? AND status = 'sent' AND date(sent_at) = ?",
+        (account_id, today)
+    ).fetchone()[0]
+    conn.close()
+    return count
+
+
+def is_account_available(account_id: int, created_at: str) -> tuple:
+    age = get_account_age_days(created_at)
+    limit = get_daily_limit(age)
+    sent = get_messages_today(account_id)
+    return sent < limit, f"{sent}/{limit}"
+
+
+# ============================================================
+# FIRST MESSAGE CHECK
+# ============================================================
+
+def check_first_message(text: str) -> tuple:
+    """Check if first message is safe. Returns (safe, reason)."""
+    text_lower = text.lower()
+    
+    # No links in first message
+    for pattern in ['http://', 'https://', 't.me/', 'telegram.me/', 'www.']:
+        if pattern in text_lower:
+            return False, "Ссылки в первом сообщении запрещены"
+    
+    # Not too long
+    if len(text) > 500:
+        return False, "Первое сообщение слишком длинное (макс 500)"
+    
+    # No spam words
+    spam_words = ['заработок', 'доход', 'миллион', 'бесплатно', 'акция',
+                  'скидка', 'промокод', 'крипто', 'bitcoin', 'инвестиции']
+    for word in spam_words:
+        if word in text_lower:
+            return False, f"Спам-слово: {word}"
+    
+    # No CAPS spam
+    caps_ratio = sum(1 for c in text if c.isupper()) / max(len(text), 1)
+    if caps_ratio > 0.5 and len(text) > 20:
+        return False, "Слишком много заглавных букв"
+    
+    return True, "OK"
+
+
+def is_first_contact(username: str) -> bool:
+    conn = get_db()
+    count = conn.execute(
+        "SELECT COUNT(*) FROM message_log WHERE contact_username = ? AND status = 'sent'",
+        (username,)
+    ).fetchone()[0]
+    conn.close()
+    return count == 0
+
+
+# ============================================================
+# DATABASE HELPERS
+# ============================================================
+
+def get_db():
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def get_proxy():
     if not PROXY_CONF.exists():
         return None, None, None
@@ -31,17 +203,9 @@ def get_proxy():
     return None, None, None
 
 
-def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def get_active_accounts():
     conn = get_db()
-    accounts = conn.execute(
-        "SELECT * FROM tg_accounts WHERE status = 'active'"
-    ).fetchall()
+    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
     conn.close()
     return [dict(a) for a in accounts]
 
@@ -104,6 +268,10 @@ def update_campaign_progress(campaign_id):
     conn.close()
 
 
+# ============================================================
+# TELETHON SEND
+# ============================================================
+
 async def send_message(account, username, text):
     """Send message via Telethon. Returns (ok, error, flood_seconds)."""
     host, port, secret = get_proxy()
@@ -133,6 +301,10 @@ async def send_message(account, username, text):
             await client.disconnect()
             return False, "User not found: " + str(e)[:30], 0
 
+        # Simulate typing delay
+        typing_time = get_typing_delay(len(text))
+        await asyncio.sleep(min(typing_time, 5))  # Cap at 5s for speed
+
         await client.send_message(entity, text)
         await client.disconnect()
         return True, None, 0
@@ -146,7 +318,6 @@ async def send_message(account, username, text):
                 pass
 
         if "flood" in err.lower() or "Too many requests" in err or "PeerFlood" in err:
-            import re
             match = re.search(r"(\d+)\s*second", err)
             seconds = int(match.group(1)) if match else 300
             if "PeerFlood" in err:
@@ -161,15 +332,25 @@ async def send_single_test(account_phone, target_username, text):
     conn = get_db()
     account = conn.execute("SELECT * FROM tg_accounts WHERE phone = ?", (account_phone,)).fetchone()
     conn.close()
-
     if not account:
         return False, "Account not found", 0
-
     return await send_message(dict(account), target_username, text)
 
 
+# ============================================================
+# CAMPAIGN RUNNER (WITH FULL ANTI-SPAM)
+# ============================================================
+
 async def run_campaign(campaign_id):
-    """Run a full campaign with multiple templates and flood handling."""
+    """
+    Run campaign with full anti-spam protection:
+    - Spintax for message uniqueness
+    - Smart delays based on account age
+    - Daily limits per account
+    - First message safety check
+    - Flood handling with account rotation
+    - Sending window (9:00-22:00)
+    """
     contacts, campaign = get_contacts_for_campaign(campaign_id)
     if not campaign:
         return {"error": "No campaign found"}
@@ -187,10 +368,7 @@ async def run_campaign(campaign_id):
     if not templates_to_use:
         templates_to_use = all_templates
 
-    delay_min = campaign.get("delay_min", 30)
-    delay_max = campaign.get("delay_max", 60)
-    messages_per_account = campaign.get("messages_per_account", 20)
-
+    # Update campaign status
     conn = get_db()
     conn.execute(
         "UPDATE campaigns SET status = 'running', started_at = ?, total_contacts = ? WHERE id = ?",
@@ -199,35 +377,64 @@ async def run_campaign(campaign_id):
     conn.commit()
     conn.close()
 
-    results = {"sent": 0, "failed": 0, "errors": []}
+    results = {"sent": 0, "failed": 0, "skipped": 0, "errors": []}
     account_index = 0
+    flood_until = {}  # account_id -> timestamp
+    messages_per_account = campaign.get("messages_per_account", 20)
     messages_on_current = 0
-    flood_until = {}  # phone -> timestamp
 
     for contact in contacts:
+        # Check campaign status
         conn = get_db()
         c = conn.execute("SELECT status FROM campaigns WHERE id = ?", (campaign_id,)).fetchone()
         conn.close()
         if not c or c["status"] != "running":
             break
 
-        username = contact["username"]
-        template = random.choice(templates_to_use)
-        text = template["text"]
-        text = text.replace("{name}", contact.get("name") or username)
-        text = text.replace("{username}", username)
+        # Check sending window (9-22)
+        current_hour = datetime.now().hour
+        if current_hour < 9 or current_hour >= 22:
+            # Sleep until sending window
+            sleep_hours = (9 - current_hour) % 24
+            await asyncio.sleep(min(sleep_hours * 3600, 3600))  # Max 1 hour sleep
+            continue
 
-        # Try each account until success or all exhausted
+        username = contact["username"]
+        contact_name = contact.get("name", "")
+        is_first = is_first_contact(username)
+
+        # Generate unique text with spintax
+        template = random.choice(templates_to_use)
+        text = generate_unique_text(template["text"], contact_name, username)
+
+        # First message safety check
+        if is_first:
+            safe, reason = check_first_message(text)
+            if not safe:
+                results["skipped"] += 1
+                results["errors"].append(f"{username}: {reason}")
+                log_message(campaign_id, 0, username, "skipped", reason)
+                continue
+
+        # Try each account
         sent_ok = False
         attempts = 0
         max_attempts = len(accounts)
 
         while not sent_ok and attempts < max_attempts:
-            # Find available (non-flooded) accounts
-            available = [a for a in accounts if flood_until.get(a["phone"], 0) < time.time()]
+            # Find available (non-flooded, within daily limit) accounts
+            available = []
+            for a in accounts:
+                if flood_until.get(a["id"], 0) > time.time():
+                    continue
+                age = get_account_age_days(a.get("created_at", ""))
+                limit = get_daily_limit(age)
+                sent_today = get_messages_today(a["id"])
+                if sent_today < limit:
+                    available.append(a)
 
             if not available:
-                # All flooded - wait for soonest
+                # All accounts exhausted - wait
                 if flood_until:
                     min_wait = min(flood_until.values()) - time.time()
                     if min_wait > 0:
@@ -235,13 +442,15 @@ async def run_campaign(campaign_id):
                     flood_until.clear()
                 available = accounts
 
-            # Rotate accounts
+            account = available[account_index % len(available)]
+
+            # Rotate if needed
             if messages_on_current >= messages_per_account:
                 account_index = (account_index + 1) % len(available)
                 messages_on_current = 0
+                account = available[account_index % len(available)]
 
-            account = available[account_index % len(available)]
-
+            # Send
             ok, error, flood_seconds = await send_message(account, username, text)
 
             if ok:
@@ -256,26 +465,36 @@ async def run_campaign(campaign_id):
                 conn.close()
                 sent_ok = True
                 messages_on_current += 1
+
             elif "FLOOD" in str(error):
-                # Mark account as flooded and try next
-                flood_until[account["phone"]] = time.time() + flood_seconds
+                flood_until[account["id"]] = time.time() + flood_seconds
                 log_message(campaign_id, account["id"], username, "flood_wait", error)
                 account_index = (account_index + 1) % len(accounts)
                 messages_on_current = 0
                 attempts += 1
+
             else:
                 results["failed"] += 1
-                results["errors"].append(username + ": " + str(error))
+                results["errors"].append(f"{username}: {error}")
                 log_message(campaign_id, account["id"], username, "failed", error)
                 attempts += 1
 
         update_campaign_progress(campaign_id)
 
-        # Delay between successful sends
+        # Smart delay between successful sends
         if sent_ok:
-            delay = random.uniform(delay_min, delay_max)
+            age = get_account_age_days(account.get("created_at", ""))
+            sent_today = get_messages_today(account["id"])
+            delay = get_smart_delay(age, sent_today, is_first)
+            
+            # Check for random long pause (lunch/break)
+            hour = datetime.now().hour
+            if 12 <= hour <= 14 and random.random() < 0.3:
+                delay += random.uniform(1800, 3600)  # Lunch break
+            
             await asyncio.sleep(delay)
 
+    # Mark completed
     conn = get_db()
     conn.execute(
         "UPDATE campaigns SET status = 'completed', completed_at = ? WHERE id = ?",

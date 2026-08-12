@@ -6,11 +6,15 @@
 <div class="card">
     <h2>Новый шаблон</h2>
     <form method="POST" action="/templates/add">
-        <div class="form-group"><label>Название</label><input type="text" name="name" placeholder="Например: Приветствие рекрутеру" required></div>
+        <div class="form-group"><label>Название</label><input type="text" name="name" placeholder="Приветствие рекрутеру" required></div>
         <div class="form-group">
-            <label>Текст сообщения</label>
-            <textarea name="text" rows="5" placeholder="Привет, {name}! ..." required></textarea>
-            <div style="color:var(--ink-tertiary);font-size:12px;margin-top:4px">Переменные: <code>{name}</code> — имя контакта, <code>{username}</code> — юзернейм</div>
+            <label>Текст сообщения (поддерживает spintax)</label>
+            <textarea name="text" rows="6" placeholder="{Привет|Здравствуйте|Добрый день}, {name}! {Вижу|Заметил}, что ты {работаешь|специализируешься} в {HR|рекрутинге}..." required></textarea>
+            <div style="margin-top:8px;padding:12px;background:var(--surface-2);border-radius:var(--r-sm);font-size:12px;color:var(--ink-subtle)">
+                <strong>Переменные:</strong> <code>{name}</code> — имя, <code>{username}</code> — юзернейм<br>
+                <strong>Spintax:</strong> <code>{вариант1|вариант2|вариант3}</code> — случайный выбор<br>
+                <strong>Пример:</strong> <code>{Привет|Здравствуй}, {name}! {Вижу|Заметил}, что ты {HR|рекрутер}.</code>
+            </div>
         </div>
         <button type="submit" class="btn btn-primary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
@@ -19,13 +23,22 @@
     </form>
 </div>
 
+<div class="card" style="border-color:var(--accent-soft)">
+    <h2 style="color:var(--accent)">🛡 Защита от спама (активна)</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;color:var(--ink-subtle)">
+        <div>✅ Spintax — уникализация текста</div>
+        <div>✅ Умные задержки 2-10 мин</div>
+        <div>✅ Дневные лимиты по возрасту</div>
+        <div>✅ Нет ссылок в первом ЛС</div>
+        <div>✅ Ротация аккаунтов при флуде</div>
+        <div>✅ Окно отправки 9:00-22:00</div>
+    </div>
+</div>
+
 {% for t in templates %}
 <div class="card template-item">
     <div style="display:flex;justify-content:space-between;align-items:start">
-        <h3 style="margin-bottom:8px">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;opacity:0.5"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
-            {{ t.name }}
-        </h3>
+        <h3 style="margin-bottom:8px">{{ t.name }}</h3>
         <form method="POST" action="/templates/{{ t.id }}/delete" onsubmit="return confirm('Удалить шаблон?')">
             <button type="submit" class="btn-icon" title="Удалить">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -33,14 +46,17 @@
         </form>
     </div>
     <div class="text">{{ t.text }}</div>
+    <div style="font-size:11px;color:var(--ink-tertiary);margin-top:8px">
+        {% if '{' in t.text %}✅ Spintax активен{% else %}⚠️ Нет spintax — добавьте вариации для уникальности{% endif %}
+    </div>
 </div>
 {% endfor %}
 
 {% if not templates %}
 <div class="card" style="text-align:center;color:var(--ink-tertiary);padding:60px">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:16px;opacity:0.3"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom:16px;opacity:0.3"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
     <p>Пока нет шаблонов</p>
-    <p style="font-size:13px;margin-top:8px">Создайте несколько шаблонов — сообщения будут чередоваться при рассылке</p>
+    <p style="font-size:13px;margin-top:8px">Создайте шаблон с spintax для уникальных сообщений</p>
 </div>
 {% endif %}
 {% endblock %}

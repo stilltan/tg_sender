@@ -438,13 +438,35 @@ async def accounts_page(request: Request):
         return RedirectResponse(url="/login", status_code=302)
     
     conn = get_db()
-    accounts = conn.execute("SELECT * FROM tg_accounts ORDER BY created_at DESC").fetchall()
+    accounts_raw = conn.execute("SELECT * FROM tg_accounts ORDER BY created_at DESC").fetchall()
     conn.close()
+    
+    accounts = []
+    for a in accounts_raw:
+        a = dict(a)
+        from datetime import datetime
+        created = a.get('created_at', '')
+        if created:
+            try:
+                age = (datetime.now() - datetime.fromisoformat(created.split('+')[0])).days
+            except:
+                age = 0
+        else:
+            age = 0
+        a['age_days'] = age
+        # Daily limit by age
+        limits = {0:3, 3:5, 7:8, 14:12, 30:20, 60:30, 90:40, 180:60, 365:80}
+        limit = 3
+        for threshold, val in sorted(limits.items()):
+            if age >= threshold:
+                limit = val
+        a['daily_limit'] = limit
+        accounts.append(a)
     
     return templates.TemplateResponse("accounts.html", {
         "request": request,
         "user": user,
-        "accounts": [dict(a) for a in accounts],
+        "accounts": accounts,
     })
 
 @app.post("/accounts/add")
