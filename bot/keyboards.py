@@ -12,8 +12,9 @@ def build_main_menu() -> ReplyKeyboardMarkup:
     """Main menu keyboard."""
     keyboard = [
         [KeyboardButton("📋 Контакты"), KeyboardButton("📤 Рассылка")],
-        [KeyboardButton("📊 Статистика"), KeyboardButton("📝 Шаблоны")],
-        [KeyboardButton("⚙️ Настройки"), KeyboardButton("❓ Помощь")],
+        [KeyboardButton("🧪 Тест"), KeyboardButton("📊 Статистика")],
+        [KeyboardButton("📝 Шаблоны"), KeyboardButton("⚙️ Настройки")],
+        [KeyboardButton("❓ Помощь")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 

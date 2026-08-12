@@ -122,6 +122,86 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
+async def cmd_test(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Test sending a message to the first active contact."""
+    user_id = update.effective_user.id
+    
+    if not db.is_admin(user_id):
+        await update.message.reply_text("⛔️ Нет доступа")
+        return
+    
+    # Get first active contact
+    contacts = db.get_all_contacts(status="active")
+    
+    if not contacts:
+        await update.message.reply_text(
+            "❌ Нет активных контактов для теста.\n"
+            "Добавьте контакты через 📋 Контакты → ➕ Добавить"
+        )
+        return
+    
+    contact = contacts[0]
+    username = contact['username']
+    
+    # Try to send a test message
+    test_text = (
+        f"🧪 *Тестовое сообщение*\n\n"
+        f"Это тестовая отправка из бота TG Sender.\n"
+        f"Контакт: @{username}\n"
+        f"Время: {update.message.date}"
+    )
+    
+    await update.message.reply_text(
+        f"🧪 *Тест отправки*\n\n"
+        f"Попробую отправить сообщение @{username}...\n"
+        f"⏳ Ожидайте результат...",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    try:
+        # Try to send message to the contact
+        await context.bot.send_message(
+            chat_id=f"@{username}",
+            text="🧪 Тестовое сообщение от TG Sender бота!\n\n"
+                 "Если вы получили это сообщение — бот работает корректно. ✅"
+        )
+        
+        # Mark as contacted
+        db.mark_contact(contact['id'], 'contacted')
+        
+        await update.message.reply_text(
+            f"✅ *Тест пройден!*\n\n"
+            f"Сообщение отправлено @{username}\n"
+            f"Статус контакта обновлён: contacted",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        error_msg = str(e)
+        
+        # Handle specific errors
+        if "Forbidden" in error_msg or "blocked" in error_msg.lower():
+            db.mark_contact(contact['id'], 'blocked')
+            await update.message.reply_text(
+                f"⚠️ *Тест завершён с ошибкой*\n\n"
+                f"@{username} заблокировал бота или не начинал диалог.\n"
+                f"Статус: blocked",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif "chat not found" in error_msg.lower() or "user not found" in error_msg.lower():
+            await update.message.reply_text(
+                f"❌ *Ошибка*\n\n"
+                f"@{username} не найден в Telegram.\n"
+                f"Проверьте правильность username.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await update.message.reply_text(
+                f"❌ *Ошибка отправки*\n\n"
+                f"@{username}: {error_msg[:200]}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+
 # ============================================================
 # MAIN MENU HANDLERS
 # ============================================================
@@ -142,6 +222,8 @@ async def handle_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await show_settings(update, context)
     elif text == "❓ Помощь":
         await cmd_help(update, context)
+    elif text == "🧪 Тест":
+        await cmd_test(update, context)
 
 
 async def show_contacts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
