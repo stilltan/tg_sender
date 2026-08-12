@@ -747,10 +747,13 @@ async def create_campaign(
         return RedirectResponse(url="/login", status_code=302)
     
     conn = get_db()
+    # Get message text from template
+    tmpl = conn.execute('SELECT text FROM message_templates WHERE id = ?', (template_id,)).fetchone()
+    message_text = tmpl['text'] if tmpl else ''
     conn.execute(
-        """INSERT INTO campaigns (name, template_id, contact_group, delay_min, delay_max, messages_per_account)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (name, template_id, contact_group, delay_min, delay_max, messages_per_account)
+        """INSERT INTO campaigns (name, message_text, template_id, contact_group, delay_min, delay_max, messages_per_account)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (name, message_text, template_id, contact_group, delay_min, delay_max, messages_per_account)
     )
     conn.commit()
     conn.close()
