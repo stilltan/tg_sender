@@ -30,7 +30,10 @@ if str(ROOT) not in sys.path:
 # ============================================================
 
 app = FastAPI(title="TG Sender", docs_url=None, redoc_url=None)
-app.add_middleware(SessionMiddleware, secret_key=secrets.token_hex(32))
+# Ключ подписи сессий — из настроек (не пересоздаётся при каждом рестарте)
+SESSION_SECRET = os.environ.get("TG_SENDER_SECRET_KEY") or secrets.token_hex(32)
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET,
+                   max_age=60 * 60 * 12, same_site="strict", https_only=False)
 
 templates_dir = Path(__file__).parent / "templates"
 templates_dir.mkdir(exist_ok=True)
@@ -147,6 +150,18 @@ def init_db():
     conn = get_db()
     cur = conn.cursor()
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS admin_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL DEFAULT '',
+            action TEXT NOT NULL DEFAULT '',
+            detail TEXT NOT NULL DEFAULT '',
+            ip TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_admin_log_id ON admin_log(id DESC)")
+
     # Create default admin user
     existing = cur.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
     if not existing:
@@ -191,6 +206,89 @@ def migrate_db():
 
 
 # ============================================================
+# SECURITY (как в проекте I•Match: журнал действий, защита логина, IP-фильтр)
+# ============================================================
+
+# Разрешённые IP для входа (через запятую). Пусто = без ограничения по IP.
+# Дополнительный слой к закрытому порту: даже с localhost можно ограничить.
+IP_ALLOWLIST = {s.strip() for s in
+                os.environ.get("TG_SENDER_IP_ALLOWLIST", "").split(",") if s.strip()}
+
+# Лимит неудачных входов: N попыток за окно M минут с одного IP
+LOGIN_MAX_ATTEMPTS = int(os.environ.get("TG_SENDER_LOGIN_MAX_ATTEMPTS", "10") or 10)
+LOGIN_WINDOW_SEC = int(os.environ.get("TG_SENDER_LOGIN_WINDOW_SEC", "300") or 300)
+LOGIN_FAIL_DELAY_SEC = float(os.environ.get("TG_SENDER_LOGIN_FAIL_DELAY_SEC", "1.5") or 1.5)
+
+_login_attempts: Dict[str, list] = {}  # ip -> [timestamps]
+
+
+def client_ip(request: Request) -> str:
+    """IP клиента (учитывает X-Forwarded-For, если пришли через прокси)."""
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    if request.client:
+        return request.client.host or ""
+    return ""
+
+
+def ip_allowed(request: Request) -> bool:
+    if not IP_ALLOWLIST:
+        return True
+    ip = client_ip(request)
+    if ip in IP_ALLOWLIST:
+        return True
+    # localhost всегда разрешён (порт закрыт снаружи — это штатный канал)
+    if ip in ("127.0.0.1", "::1", "localhost"):
+        return True
+    return False
+
+
+def login_rate_check(ip: str) -> None:
+    """Проверяет лимит попыток входа; при превышении — HTTP 429."""
+    now = datetime.now().timestamp()
+    _login_attempts.setdefault(ip, [])
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < LOGIN_WINDOW_SEC]
+    if len(_login_attempts[ip]) >= LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Слишком много попыток входа. Подождите 5 минут.")
+
+
+def login_rate_fail(ip: str) -> None:
+    """Фиксирует неудачную попытку входа."""
+    _login_attempts.setdefault(ip, []).append(datetime.now().timestamp())
+
+
+def login_rate_reset(ip: str) -> None:
+    _login_attempts.pop(ip, None)
+
+
+def log_action(username: str, action: str, detail: str = "", ip: str = "") -> None:
+    """Записывает действие в журнал (аудит): кто, что, когда, с какого IP."""
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO admin_log (username, action, detail, ip, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (str(username)[:64], str(action)[:64], str(detail)[:500], str(ip)[:64],
+             datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[audit] log failed: {e}")
+
+
+def admin_log_list(limit: int = 100) -> list:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT username, action, detail, ip, created_at FROM admin_log "
+        "ORDER BY id DESC LIMIT ?", (int(limit),)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ============================================================
 # AUTH HELPERS
 # ============================================================
 
@@ -232,14 +330,32 @@ async def login_page(request: Request):
 
 @app.post("/login")
 async def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
+    if not ip_allowed(request):
+        return templates.TemplateResponse("login.html", {
+            "request": request, "error": "Доступ с этого IP запрещён (см. TG_SENDER_IP_ALLOWLIST)"
+        })
+    ip = client_ip(request)
+    try:
+        login_rate_check(ip)
+    except HTTPException:
+        return templates.TemplateResponse("login.html", {
+            "request": request, "error": "Слишком много попыток входа. Подождите 5 минут."
+        })
+
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     conn.close()
-    
+
     if user and verify_password(password, user["password_hash"]):
+        login_rate_reset(ip)
         request.session["user_id"] = user["id"]
+        log_action(username, "login", "успешный вход", ip)
         return RedirectResponse(url="/dashboard", status_code=302)
-    
+
+    login_rate_fail(ip)
+    log_action(username, "login_fail", "неверный пароль", ip)
+    # задержка, чтобы затруднить перебор пароля
+    await asyncio.sleep(LOGIN_FAIL_DELAY_SEC)
     return templates.TemplateResponse("login.html", {
         "request": request,
         "error": "Неверный логин или пароль"
@@ -247,12 +363,25 @@ async def login_submit(request: Request, username: str = Form(...), password: st
 
 @app.get("/logout")
 async def logout(request: Request):
+    user = get_current_user(request)
+    if user:
+        log_action(user.get("username") or "", "logout", "выход", client_ip(request))
     request.session.clear()
     return RedirectResponse(url="/login", status_code=302)
 
 # ============================================================
 # ROUTES - DASHBOARD
 # ============================================================
+
+@app.get("/logs", response_class=HTMLResponse)
+async def logs_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    items = admin_log_list(100)
+    return templates.TemplateResponse("logs.html", {
+        "request": request, "user": user, "active": "logs", "items": items,
+    })
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -331,6 +460,7 @@ async def add_account(request: Request, phone: str = Form(...), api_id: int = Fo
     )
     conn.commit()
     conn.close()
+    log_action(user.get("username") or "", "account_add", f"телефон {phone[:5]}***", client_ip(request))
     
     return RedirectResponse(url="/accounts", status_code=302)
 
@@ -344,6 +474,7 @@ async def delete_account(request: Request, account_id: int):
     conn.execute("DELETE FROM tg_accounts WHERE id = ?", (account_id,))
     conn.commit()
     conn.close()
+    log_action(user.get("username") or "", "account_delete", f"id {account_id}", client_ip(request))
     
     return RedirectResponse(url="/accounts", status_code=302)
 
@@ -484,6 +615,7 @@ async def import_contacts(request: Request, contacts_text: str = Form(""), group
     
     conn.commit()
     conn.close()
+    log_action(user.get("username") or "", "contacts_import", f"добавлено {added}", client_ip(request))
     
     return RedirectResponse(url=f"/contacts?group={group}", status_code=302)
 
@@ -643,6 +775,7 @@ async def start_campaign(request: Request, campaign_id: int):
         start_campaign_async(campaign_id)
     except Exception as e:
         print(f"Campaign start error: {e}")
+    log_action(user.get("username") or "", "campaign_start", f"кампания #{campaign_id}", client_ip(request))
     
     return JSONResponse({"ok": True, "message": "Рассылка запущена"})
 
@@ -656,6 +789,7 @@ async def pause_campaign(request: Request, campaign_id: int):
     conn.execute("UPDATE campaigns SET status = 'paused' WHERE id = ?", (campaign_id,))
     conn.commit()
     conn.close()
+    log_action(user.get("username") or "", "campaign_pause", f"кампания #{campaign_id}", client_ip(request))
     
     return JSONResponse({"ok": True})
 
@@ -670,6 +804,7 @@ async def delete_campaign(request: Request, campaign_id: int):
     conn.execute("DELETE FROM campaigns WHERE id = ?", (campaign_id,))
     conn.commit()
     conn.close()
+    log_action(user.get("username") or "", "campaign_delete", f"кампания #{campaign_id}", client_ip(request))
     
     return RedirectResponse(url="/campaigns", status_code=302)
 
@@ -753,6 +888,7 @@ async def add_user(request: Request, username: str = Form(...), password: str = 
     conn.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
     conn.commit()
     conn.close()
+    log_action(user.get("username") or "", "user_add", username, client_ip(request))
     
     return RedirectResponse(url="/settings", status_code=302)
 
@@ -771,6 +907,7 @@ async def delete_user(request: Request, user_id: int):
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
+    log_action(user.get("username") or "", "user_delete", f"id {user_id}", client_ip(request))
     
     return RedirectResponse(url="/settings", status_code=302)
 

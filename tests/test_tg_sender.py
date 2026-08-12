@@ -180,6 +180,73 @@ class TestAuth(unittest.TestCase):
         self.assertIn("account_id", log_cols)
 
 
+class TestSecurity(unittest.TestCase):
+    """Защита как в I•Match: журнал действий, лимит входов, IP-фильтр, ключ сессии."""
+
+    def setUp(self):
+        self.db = os.path.join(_TMP, "sec_test.db")
+        if os.path.exists(self.db):
+            os.remove(self.db)
+        import web.app as app
+        app.DB_PATH = self.db
+        app.init_db()
+
+    def test_log_action_writes_and_list(self):
+        import web.app as app
+        app.log_action("admin", "login", "успешный вход", "127.0.0.1")
+        app.log_action("admin", "campaign_start", "кампания #1", "10.0.0.1")
+        items = app.admin_log_list()
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["action"], "campaign_start")
+        self.assertEqual(items[0]["ip"], "10.0.0.1")
+        self.assertEqual(items[1]["username"], "admin")
+
+    def test_login_rate_limit(self):
+        import web.app as app
+        ip = "192.168.0.55"
+        app._login_attempts.clear()
+        app.login_rate_reset(ip)
+        for _ in range(app.LOGIN_MAX_ATTEMPTS):
+            app.login_rate_check(ip)      # до лимита — ок
+            app.login_rate_fail(ip)
+        with self.assertRaises(Exception):
+            app.login_rate_check(ip)      # превышен лимит → HTTPException(429)
+        app.login_rate_reset(ip)
+        app.login_rate_check(ip)          # после сброса снова ок
+
+    def test_ip_allowed(self):
+        import web.app as app
+        app.IP_ALLOWLIST = {"10.1.1.1"}
+        class FakeRequest:
+            client = type("C", (), {"host": "127.0.0.1"})()
+            headers = {}
+        # localhost разрешён всегда
+        self.assertTrue(app.ip_allowed(FakeRequest()))
+        class FakeRequest2:
+            client = type("C", (), {"host": "8.8.8.8"})()
+            headers = {}
+        self.assertFalse(app.ip_allowed(FakeRequest2()))
+        class FakeRequest3:
+            client = type("C", (), {"host": "10.1.1.1"})()
+            headers = {}
+        self.assertTrue(app.ip_allowed(FakeRequest3()))
+        app.IP_ALLOWLIST = set()
+
+    def test_client_ip_xff(self):
+        import web.app as app
+        class FakeRequest:
+            client = type("C", (), {"host": "127.0.0.1"})()
+            headers = {"x-forwarded-for": "203.0.113.9, 10.0.0.1"}
+        self.assertEqual(app.client_ip(FakeRequest()), "203.0.113.9")
+
+    def test_init_db_creates_admin_log_table(self):
+        import web.app as app
+        c = sqlite3.connect(self.db)
+        tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        c.close()
+        self.assertIn("admin_log", tables)
+
+
 class TestContactsEngine(unittest.TestCase):
     def setUp(self):
         self.db = os.path.join(_TMP, "contacts_test.db")
