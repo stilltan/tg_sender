@@ -107,8 +107,10 @@ def update_campaign_progress(campaign_id):
 async def send_message(account, username, text):
     """Send message via Telethon. Returns (ok, error, flood_seconds)."""
     host, port, secret = get_proxy()
-    session_path = str(SESSIONS_DIR / account["phone"].replace("+", ""))
+    phone = account["phone"].replace("+", "")
+    session_path = str(SESSIONS_DIR / phone)
 
+    client = None
     try:
         proxy = None
         if host:
@@ -117,19 +119,19 @@ async def send_message(account, username, text):
         client = TelegramClient(
             session_path, account["api_id"], account["api_hash"],
             connection=ConnectionTcpMTProxyRandomizedIntermediate,
-            proxy=proxy, connection_retries=2, timeout=15,
+            proxy=proxy, connection_retries=1, timeout=15,
         )
-        await client.connect()
+        await asyncio.wait_for(client.connect(), timeout=20)
 
         if not await client.is_user_authorized():
             await client.disconnect()
-            return False, "Account not authorized", 0
+            return False, "Not authorized", 0
 
         try:
             entity = await client.get_entity(username)
         except Exception as e:
             await client.disconnect()
-            return False, f"User not found: {str(e)[:30]}", 0
+            return False, "User not found: " + str(e)[:30], 0
 
         await client.send_message(entity, text)
         await client.disconnect()
@@ -137,21 +139,19 @@ async def send_message(account, username, text):
 
     except Exception as e:
         err = str(e)
-        try:
-            await client.disconnect()
-        except:
-            pass
+        if client:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
 
-        # Detect flood wait
-        if "flood" in err.lower() or "Too many requests" in err:
-            # Extract seconds
+        if "flood" in err.lower() or "Too many requests" in err or "PeerFlood" in err:
             import re
-            match = re.search(r'(\d+)\s*second', err)
+            match = re.search(r"(\d+)\s*second", err)
             seconds = int(match.group(1)) if match else 300
-            return False, f"FLOOD_WAIT:{seconds}", seconds
-
-        if "PeerFlood" in err:
-            return False, "PEER_FLOOD:account restricted", 3600
+            if "PeerFlood" in err:
+                seconds = 3600
+            return False, "FLOOD_WAIT:" + str(seconds), seconds
 
         return False, err[:100], 0
 
@@ -178,12 +178,10 @@ async def run_campaign(campaign_id):
     if not accounts:
         return {"error": "No active accounts"}
 
-    # Get all templates for random selection
     all_templates = get_templates()
     if not all_templates:
         return {"error": "No templates"}
 
-    # Filter templates if campaign has specific ones
     campaign_template_id = campaign.get("template_id")
     templates_to_use = [t for t in all_templates if t["id"] == campaign_template_id] if campaign_template_id else all_templates
     if not templates_to_use:
@@ -204,72 +202,80 @@ async def run_campaign(campaign_id):
     results = {"sent": 0, "failed": 0, "errors": []}
     account_index = 0
     messages_on_current = 0
-    flood_until = {}  # account_phone -> timestamp when flood ends
+    flood_until = {}  # phone -> timestamp
 
     for contact in contacts:
-        # Check campaign status
         conn = get_db()
         c = conn.execute("SELECT status FROM campaigns WHERE id = ?", (campaign_id,)).fetchone()
         conn.close()
         if not c or c["status"] != "running":
             break
 
-        # Find available account (skip flooded ones)
-        available_accounts = [a for a in accounts if flood_until.get(a["phone"], 0) < time.time()]
-        if not available_accounts:
-            # All accounts flooded, wait
-            min_wait = min(flood_until.values()) - time.time()
-            if min_wait > 0:
-                await asyncio.sleep(min(min_wait + 5, 300))
-            available_accounts = accounts
-
-        if messages_on_current >= messages_per_account:
-            account_index = (account_index + 1) % len(available_accounts)
-            messages_on_current = 0
-
-        account = available_accounts[account_index % len(available_accounts)]
         username = contact["username"]
-
-        # Pick random template
         template = random.choice(templates_to_use)
         text = template["text"]
         text = text.replace("{name}", contact.get("name") or username)
         text = text.replace("{username}", username)
 
-        ok, error, flood_seconds = await send_message(account, username, text)
+        # Try each account until success or all exhausted
+        sent_ok = False
+        attempts = 0
+        max_attempts = len(accounts)
 
-        if ok:
-            results["sent"] += 1
-            log_message(campaign_id, account["id"], username, "sent")
-            conn = get_db()
-            conn.execute(
-                "UPDATE contacts SET status = 'contacted', last_contacted = ? WHERE id = ?",
-                (datetime.now().isoformat(), contact["id"])
-            )
-            conn.commit()
-            conn.close()
-        elif "FLOOD" in str(error) or "PEER_FLOOD" in str(error):
-            results["failed"] += 1
-            results["errors"].append(f"{username}: {error}")
-            log_message(campaign_id, account["id"], username, "flood_wait", error)
-            # Mark account as flooded
-            flood_until[account["phone"]] = time.time() + flood_seconds
-            # Try next account
-            account_index = (account_index + 1) % len(accounts)
-            messages_on_current = 0
-        else:
-            results["failed"] += 1
-            results["errors"].append(f"{username}: {error}")
-            log_message(campaign_id, account["id"], username, "failed", error)
+        while not sent_ok and attempts < max_attempts:
+            # Find available (non-flooded) accounts
+            available = [a for a in accounts if flood_until.get(a["phone"], 0) < time.time()]
 
-        messages_on_current += 1
+            if not available:
+                # All flooded - wait for soonest
+                if flood_until:
+                    min_wait = min(flood_until.values()) - time.time()
+                    if min_wait > 0:
+                        await asyncio.sleep(min(min_wait + 5, 300))
+                    flood_until.clear()
+                available = accounts
+
+            # Rotate accounts
+            if messages_on_current >= messages_per_account:
+                account_index = (account_index + 1) % len(available)
+                messages_on_current = 0
+
+            account = available[account_index % len(available)]
+
+            ok, error, flood_seconds = await send_message(account, username, text)
+
+            if ok:
+                results["sent"] += 1
+                log_message(campaign_id, account["id"], username, "sent")
+                conn = get_db()
+                conn.execute(
+                    "UPDATE contacts SET status = 'contacted', last_contacted = ? WHERE id = ?",
+                    (datetime.now().isoformat(), contact["id"])
+                )
+                conn.commit()
+                conn.close()
+                sent_ok = True
+                messages_on_current += 1
+            elif "FLOOD" in str(error):
+                # Mark account as flooded and try next
+                flood_until[account["phone"]] = time.time() + flood_seconds
+                log_message(campaign_id, account["id"], username, "flood_wait", error)
+                account_index = (account_index + 1) % len(accounts)
+                messages_on_current = 0
+                attempts += 1
+            else:
+                results["failed"] += 1
+                results["errors"].append(username + ": " + str(error))
+                log_message(campaign_id, account["id"], username, "failed", error)
+                attempts += 1
+
         update_campaign_progress(campaign_id)
 
-        # Random delay
-        delay = random.uniform(delay_min, delay_max)
-        await asyncio.sleep(delay)
+        # Delay between successful sends
+        if sent_ok:
+            delay = random.uniform(delay_min, delay_max)
+            await asyncio.sleep(delay)
 
-    # Mark completed
     conn = get_db()
     conn.execute(
         "UPDATE campaigns SET status = 'completed', completed_at = ? WHERE id = ?",
@@ -300,9 +306,8 @@ def send_test_async(account_phone, target_username, text):
 
     def run():
         asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(send_single_test(account_phone, target_username, text))
+        loop.run_until_complete(send_single_test(account_phone, target_username, text))
         loop.close()
-        return result
 
     import threading
     thread = threading.Thread(target=run, daemon=True)
