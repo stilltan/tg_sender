@@ -961,6 +961,103 @@ async def test_send(
     return RedirectResponse(url="/settings?test=started", status_code=302)
 
 
+
+
+# ============================================================
+# MONITORING - View Telegram accounts and reply
+# ============================================================
+
+@app.get("/monitor", response_class=HTMLResponse)
+async def monitor_page(request: Request, phone: str = None):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    conn = get_db()
+    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
+    conn.close()
+    
+    return templates.TemplateResponse("monitor.html", {
+        "request": request,
+        "user": user,
+        "accounts": [dict(a) for a in accounts],
+        "selected_phone": None,
+        "chats": None,
+        "chat_messages": None,
+        "chat_username": None,
+        "active": "monitor",
+    })
+
+
+@app.get("/monitor/<phone>", response_class=HTMLResponse)
+async def monitor_account(request: Request, phone: str):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    conn = get_db()
+    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
+    conn.close()
+    
+    # Get chats from Telegram
+    import asyncio
+    from tg_monitor import get_recent_chats
+    chats = asyncio.run(get_recent_chats(phone, limit=30))
+    
+    return templates.TemplateResponse("monitor.html", {
+        "request": request,
+        "user": user,
+        "accounts": [dict(a) for a in accounts],
+        "selected_phone": phone,
+        "chats": chats,
+        "chat_messages": None,
+        "chat_username": None,
+        "active": "monitor",
+    })
+
+
+@app.get("/monitor/<phone>/chat/<username>", response_class=HTMLResponse)
+async def monitor_chat(request: Request, phone: str, username: str):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    conn = get_db()
+    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
+    conn.close()
+    
+    # Get messages
+    import asyncio
+    from tg_monitor import get_chat_messages
+    messages = asyncio.run(get_chat_messages(phone, username, limit=50))
+    
+    return templates.TemplateResponse("monitor.html", {
+        "request": request,
+        "user": user,
+        "accounts": [dict(a) for a in accounts],
+        "selected_phone": phone,
+        "chats": None,
+        "chat_messages": messages,
+        "chat_username": username,
+        "active": "monitor",
+    })
+
+
+@app.post("/monitor/<phone>/chat/<username>/send")
+async def monitor_send(request: Request, phone: str, username: str, message: str = Form(...)):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    import asyncio
+    from tg_monitor import send_reply
+    ok, err = asyncio.run(send_reply(phone, username, message))
+    
+    if ok:
+        log_action(user.get("username") or "", "manual_send", f"to @{username} via {phone}", client_ip(request))
+    
+    return RedirectResponse(url=f"/monitor/{phone}/chat/{username}", status_code=302)
+
 @app.get("/export/contacts")
 async def export_contacts(request: Request):
     user = get_current_user(request)
