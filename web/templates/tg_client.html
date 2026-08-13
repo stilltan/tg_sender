@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TG Client</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#17212b;--bg2:#0e1621;--bg3:#242f3d;--accent:#6ab3f3;--text:#f5f5f5;--text2:#8b9bab;--text3:#6d7f8f;--green:#4fae4e;--border:#2b3a4a}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg2);color:var(--text);height:100vh;overflow:hidden}
+.app{display:flex;height:100vh}
+.sidebar{width:70px;background:var(--bg);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:8px;border-right:1px solid var(--border)}
+.sidebar .acc{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;cursor:pointer;transition:all .2s;border:2px solid transparent;color:#fff}
+.sidebar .acc:hover{transform:scale(1.1)}
+.sidebar .acc.active{border-color:var(--accent);box-shadow:0 0 12px rgba(106,179,243,0.3)}
+.sidebar .back{margin-top:auto;opacity:0.5;cursor:pointer;font-size:20px;text-decoration:none;color:var(--text2)}
+.chat-list{width:320px;background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.chat-list .header{padding:16px;border-bottom:1px solid var(--border)}
+.chat-list .header h3{font-size:16px}
+.chat-list .search{padding:8px 16px}
+.chat-list .search input{width:100%;background:var(--bg3);border:none;border-radius:20px;padding:8px 16px;color:var(--text);font-size:14px;outline:none}
+.chats{flex:1;overflow-y:auto}
+.chat-item{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;transition:background .15s;border-bottom:1px solid rgba(255,255,255,0.03)}
+.chat-item:hover{background:rgba(255,255,255,0.05)}
+.chat-item.active{background:var(--bg3)}
+.chat-item .avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0;color:#fff}
+.chat-item .info{flex:1;min-width:0}
+.chat-item .top{display:flex;justify-content:space-between;align-items:center}
+.chat-item .name{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-item .time{font-size:11px;color:var(--text3);flex-shrink:0}
+.chat-item .msg{font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.chat-item .badge{background:var(--green);color:#fff;border-radius:12px;padding:1px 7px;font-size:11px;font-weight:700;flex-shrink:0}
+.chat-view{flex:1;display:flex;flex-direction:column;background:var(--bg2)}
+.chat-view .header{background:var(--bg);padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+.chat-view .header .avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff}
+.chat-view .header .info h4{font-size:15px}
+.chat-view .header .info small{color:var(--text3);font-size:12px}
+.messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:4px}
+.msg{max-width:65%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.4;word-wrap:break-word;white-space:pre-wrap}
+.msg.sent{background:#2b5278;align-self:flex-end;border-bottom-right-radius:4px}
+.msg.received{background:var(--bg3);align-self:flex-start;border-bottom-left-radius:4px}
+.msg .time{font-size:10px;color:var(--text3);margin-top:4px;text-align:right}
+.msg .media{color:var(--accent);font-style:italic}
+.input-area{background:var(--bg);padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.input-area input{flex:1;background:var(--bg3);border:none;border-radius:20px;padding:10px 16px;color:var(--text);font-size:14px;outline:none}
+.input-area button{background:var(--accent);border:none;border-radius:50%;width:40px;height:40px;color:#fff;cursor:pointer;font-size:18px}
+.empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--text3)}
+.empty .icon{font-size:64px;margin-bottom:16px;opacity:0.3}
+.c0{background:#e17076}.c1{background:#7bc862}.c2{background:#6ec9cb}.c3{background:#65aadd}.c4{background:#ee7aae}.c5{background:#e8a64c}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="app">
+    <div class="sidebar">
+        {% for acc in accounts %}
+        <div class="acc c{{ loop.index0 % 6 }} {% if loop.first %}active{% endif %}"
+             title="{{ acc.first_name }} {{ acc.phone }}"
+             onclick="selectAccount('{{ acc.phone }}', this)">
+            {{ (acc.first_name or acc.phone)[0]|upper }}
+        </div>
+        {% endfor %}
+        <a href="/dashboard" class="back" title="Дашборд">←</a>
+    </div>
+    <div class="chat-list">
+        <div class="header"><h3 id="accountName">{{ accounts[0].first_name if accounts else 'Аккаунт' }}</h3></div>
+        <div class="search"><input type="text" placeholder="Поиск..." oninput="filterChats(this.value)"></div>
+        <div class="chats" id="chatList"><div class="empty"><div class="icon">💬</div><p>Загрузка...</p></div></div>
+    </div>
+    <div class="chat-view">
+        <div class="empty" id="emptyState"><div class="icon">💬</div><p>Выберите чат</p></div>
+        <div class="header" id="chatHeader" style="display:none">
+            <div class="avatar c0" id="chatAvatar">?</div>
+            <div class="info"><h4 id="chatName">-</h4><small id="chatUsername">-</small></div>
+        </div>
+        <div class="messages" id="messages" style="display:none"></div>
+        <div class="input-area" id="inputArea" style="display:none">
+            <input type="text" id="msgInput" placeholder="Сообщение..." onkeydown="if(event.key==='Enter')sendMsg()">
+            <button onclick="sendMsg()">➤</button>
+        </div>
+    </div>
+</div>
+<script>
+let phone='{{ accounts[0].phone if accounts else "" }}',peerId=null,peerType='user',chats=[];
+function selectAccount(p,el){document.querySelectorAll('.acc').forEach(a=>a.classList.remove('active'));el.classList.add('active');phone=p;document.getElementById('accountName').textContent=el.title.split(' ')[0];load(p)}
+function load(p){fetch('/api/tg/'+p.replace('+','')+'/dialogs').then(r=>r.json()).then(d=>{chats=d;render(d)}).catch(()=>document.getElementById('chatList').innerHTML='<div class=empty><p>Ошибка</p></div>')}
+function render(cs){const c=document.getElementById('chatList');if(!cs.length||cs[0].error){c.innerHTML='<div class=empty><div class=icon>📭</div><p>Нет чатов</p></div>';return}let h='';cs.forEach((x,i)=>{if(x.error)return;const ini=(x.name||'?')[0].toUpperCase(),cc='c'+(i%6),t=x.last_date?fmt(x.last_date):'',om=x.last_out?'✓':'',b=x.unread?`<span class=badge>${x.unread}</span>`:'',lm=(x.last_message||'').substring(0,40);h+=`<div class=chat-item onclick=openChat(${i})><div class="avatar ${cc}">${ini}</div><div class=info><div class=top><span class=name>${x.name}</span><span class=time>${t}</span></div><div class=msg>${om} ${lm}</div></div>${b}</div>`});c.innerHTML=h}
+function filterChats(q){q=q.toLowerCase();render(chats.filter(c=>!c.error&&(c.name.toLowerCase().includes(q)||(c.username||'').toLowerCase().includes(q))))}
+function openChat(i){const c=chats[i];peerId=c.id;peerType=c.type;document.getElementById('emptyState').style.display='none';document.getElementById('chatHeader').style.display='flex';document.getElementById('messages').style.display='flex';document.getElementById('inputArea').style.display='flex';document.getElementById('chatAvatar').textContent=(c.name||'?')[0].toUpperCase();document.getElementById('chatAvatar').className='avatar c'+(i%6);document.getElementById('chatName').textContent=c.name;document.getElementById('chatUsername').textContent=c.username?'@'+c.username:'';loadMsg();fetch('/api/tg/'+phone.replace('+','')+'/read/'+c.id,{method:'POST'})}
+function loadMsg(){fetch('/api/tg/'+phone.replace('+','')+'/messages/'+peerId+'?peer_type='+peerType).then(r=>r.json()).then(renderMsg)}
+function renderMsg(ms){const c=document.getElementById('messages');if(!ms.length||ms[0].error){c.innerHTML='<div class=empty><p>Нет сообщений</p></div>';return}let h='';ms.forEach(m=>{const cls=m.out?'sent':'received',t=m.date?fmtT(m.date):'';let ct='';if(m.media)ct=`<div class=media>${m.media}</div>`;if(m.text)ct+=m.text.replace(/\n/g,'<br>');h+=`<div class="msg ${cls}">${ct}<div class=time>${t}</div></div>`});c.innerHTML=h;c.scrollTop=c.scrollHeight}
+function sendMsg(){const inp=document.getElementById('msgInput'),txt=inp.value.trim();if(!txt||!peerId)return;const c=document.getElementById('messages'),now=new Date();c.innerHTML+=`<div class=msg sent>${txt.replace(/\n/g,'<br>')}<div class=time>${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}</div></div>`;c.scrollTop=c.scrollHeight;inp.value='';fetch('/api/tg/'+phone.replace('+','')+'/send/'+peerId,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'text='+encodeURIComponent(txt)}).then(r=>r.json()).then(d=>{if(!d.ok)c.innerHTML+=`<div class="msg received" style="color:#fb7185">Ошибка: ${d.error}</div>`})}
+function fmt(iso){const d=new Date(iso),n=new Date();if(d.toDateString()===n.toDateString())return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');return d.getDate()+'.'+(d.getMonth()+1)}
+function fmtT(iso){const d=new Date(iso);return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0')}
+setInterval(()=>{if(peerId)loadMsg()},15000);
+if(phone)load(phone);
+</script>
+</body>
+</html>

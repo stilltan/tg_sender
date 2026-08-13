@@ -17,22 +17,43 @@
 </div>
 {% endblock %}
 {% block content %}
+<div class="card" style="border-color:var(--accent-soft)">
+    <h2 style="color:var(--accent);font-size:15px">🛡 Лимиты по возрасту аккаунта</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:12px;color:var(--ink-subtle);margin-top:8px">
+        <div>🔴 0-3 дня: 3/день</div>
+        <div>🟠 3-7 дней: 5/день</div>
+        <div>🟡 7-14 дней: 8/день</div>
+        <div>🟢 14-30 дней: 12/день</div>
+        <div>🟢 30-60 дней: 20/день</div>
+        <div>💚 60+ дней: 30-80/день</div>
+    </div>
+</div>
+
 <div class="card">
     <h2>Telegram аккаунты</h2>
-    <p style="color:var(--ink-tertiary);margin-bottom:16px;font-size:14px">Добавьте рабочие аккаунты для рассылки. API ID/Hash: <a href="https://my.telegram.org" target="_blank">my.telegram.org</a></p>
     {% if accounts %}
     <table>
-        <thead><tr><th>Телефон</th><th>Статус</th><th>Отправлено</th><th>Действия</th></tr></thead>
+        <thead><tr><th>Телефон</th><th>Статус</th><th>Прогрев</th><th>Лимит/день</th><th>Отправлено</th><th></th></tr></thead>
         <tbody>
         {% for a in accounts %}
         <tr>
             <td><strong>{{ a.phone }}</strong></td>
             <td><span class="badge {{ a.status }}">{{ a.status }}</span></td>
+            <td>
+                {% set age = a.get('age_days', 0) %}
+                {% if age < 7 %}🔴 Новый
+                {% elif age < 14 %}🟠 Прогрев
+                {% elif age < 30 %}🟡 Тёплый
+                {% elif age < 90 %}🟢 Зрелый
+                {% else %}💚 Ветеран{% endif %}
+                <span style="color:var(--ink-tertiary);font-size:11px">({{ age }}д)</span>
+            </td>
+            <td>{{ a.get('daily_limit', '-') }}</td>
             <td>{{ a.messages_sent }}</td>
             <td>
                 <form method="POST" action="/accounts/{{ a.id }}/delete" style="display:inline" onsubmit="return confirm('Удалить?')">
-                    <button type="submit" class="btn btn-ghost" style="padding:4px 10px;font-size:12px">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    <button type="submit" class="btn-icon" title="Удалить">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                     </button>
                 </form>
             </td>
@@ -47,10 +68,7 @@
 
 <div id="addModal" class="modal">
     <div class="modal-content">
-        <h2 style="display:flex;align-items:center;gap:10px">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
-            Добавить аккаунт
-        </h2>
+        <h2>Добавить аккаунт</h2>
         <form method="POST" action="/accounts/add">
             <div class="form-group"><label>Телефон</label><input type="text" name="phone" placeholder="+79001234567" required></div>
             <div class="form-row">

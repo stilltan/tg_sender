@@ -43,6 +43,11 @@ static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# TG Client routes
+from tg_client_routes import router as tg_router
+app.include_router(tg_router)
+
+
 # ============================================================
 # DATABASE
 # ============================================================
@@ -113,6 +118,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS campaigns (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            message_text TEXT DEFAULT '',
             template_id INTEGER,
             contact_group TEXT DEFAULT 'all',
             status TEXT DEFAULT 'draft',
@@ -193,6 +199,7 @@ def migrate_db():
         "campaigns": [
             ("template_id", "INTEGER"),
             ("messages_per_account", "INTEGER DEFAULT 20"),
+            ("message_text", "TEXT DEFAULT ''"),
         ],
     }
     for table, cols in migrations.items():
@@ -438,13 +445,35 @@ async def accounts_page(request: Request):
         return RedirectResponse(url="/login", status_code=302)
     
     conn = get_db()
-    accounts = conn.execute("SELECT * FROM tg_accounts ORDER BY created_at DESC").fetchall()
+    accounts_raw = conn.execute("SELECT * FROM tg_accounts ORDER BY created_at DESC").fetchall()
     conn.close()
+    
+    accounts = []
+    for a in accounts_raw:
+        a = dict(a)
+        from datetime import datetime
+        created = a.get('created_at', '')
+        if created:
+            try:
+                age = (datetime.now() - datetime.fromisoformat(created.split('+')[0])).days
+            except:
+                age = 0
+        else:
+            age = 0
+        a['age_days'] = age
+        # Daily limit by age
+        limits = {0:3, 3:5, 7:8, 14:12, 30:20, 60:30, 90:40, 180:60, 365:80}
+        limit = 3
+        for threshold, val in sorted(limits.items()):
+            if age >= threshold:
+                limit = val
+        a['daily_limit'] = limit
+        accounts.append(a)
     
     return templates.TemplateResponse("accounts.html", {
         "request": request,
         "user": user,
-        "accounts": [dict(a) for a in accounts],
+        "accounts": accounts,
     })
 
 @app.post("/accounts/add")
@@ -747,10 +776,13 @@ async def create_campaign(
         return RedirectResponse(url="/login", status_code=302)
     
     conn = get_db()
+    # Get message text from template
+    tmpl = conn.execute('SELECT text FROM message_templates WHERE id = ?', (template_id,)).fetchone()
+    message_text = tmpl['text'] if tmpl else ''
     conn.execute(
-        """INSERT INTO campaigns (name, template_id, contact_group, delay_min, delay_max, messages_per_account)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (name, template_id, contact_group, delay_min, delay_max, messages_per_account)
+        """INSERT INTO campaigns (name, message_text, template_id, contact_group, delay_min, delay_max, messages_per_account)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (name, message_text, template_id, contact_group, delay_min, delay_max, messages_per_account)
     )
     conn.commit()
     conn.close()
@@ -935,6 +967,103 @@ async def test_send(
     
     return RedirectResponse(url="/settings?test=started", status_code=302)
 
+
+
+
+# ============================================================
+# MONITORING - View Telegram accounts and reply
+# ============================================================
+
+@app.get("/monitor", response_class=HTMLResponse)
+async def monitor_page(request: Request, phone: str = None):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    conn = get_db()
+    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
+    conn.close()
+    
+    return templates.TemplateResponse("monitor.html", {
+        "request": request,
+        "user": user,
+        "accounts": [dict(a) for a in accounts],
+        "selected_phone": None,
+        "chats": None,
+        "chat_messages": None,
+        "chat_username": None,
+        "active": "monitor",
+    })
+
+
+@app.get("/monitor/{phone}", response_class=HTMLResponse)
+async def monitor_account(request: Request, phone: str):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    conn = get_db()
+    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
+    conn.close()
+    
+    # Get chats from Telegram
+    import asyncio
+    from tg_monitor import get_recent_chats
+    chats = asyncio.run(get_recent_chats(phone, limit=30))
+    
+    return templates.TemplateResponse("monitor.html", {
+        "request": request,
+        "user": user,
+        "accounts": [dict(a) for a in accounts],
+        "selected_phone": phone,
+        "chats": chats,
+        "chat_messages": None,
+        "chat_username": None,
+        "active": "monitor",
+    })
+
+
+@app.get("/monitor/{phone}/chat/{username}", response_class=HTMLResponse)
+async def monitor_chat(request: Request, phone: str, username: str):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    conn = get_db()
+    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
+    conn.close()
+    
+    # Get messages
+    import asyncio
+    from tg_monitor import get_chat_messages
+    messages = asyncio.run(get_chat_messages(phone, username, limit=50))
+    
+    return templates.TemplateResponse("monitor.html", {
+        "request": request,
+        "user": user,
+        "accounts": [dict(a) for a in accounts],
+        "selected_phone": phone,
+        "chats": None,
+        "chat_messages": messages,
+        "chat_username": username,
+        "active": "monitor",
+    })
+
+
+@app.post("/monitor/{phone}/chat/{username}/send")
+async def monitor_send(request: Request, phone: str, username: str, message: str = Form(...)):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    import asyncio
+    from tg_monitor import send_reply
+    ok, err = asyncio.run(send_reply(phone, username, message))
+    
+    if ok:
+        log_action(user.get("username") or "", "manual_send", f"to @{username} via {phone}", client_ip(request))
+    
+    return RedirectResponse(url=f"/monitor/{phone}/chat/{username}", status_code=302)
 
 @app.get("/export/contacts")
 async def export_contacts(request: Request):

@@ -87,16 +87,19 @@ button, input, textarea, select:focus {
 button {
   -webkit-tap-highlight-color: transparent;
   cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+
+.btn, button[type=submit] {
   background: var(--accent);
   color: white;
   border: none;
   font-weight: 600;
   padding: 10px 20px;
   border-radius: var(--r-sm);
-  transition: all 0.2s var(--ease);
 }
 
-button:hover {
+button:hover:not(.btn-icon):not(.btn-ghost) {
   background: var(--accent-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px var(--accent-glow);
@@ -516,9 +519,10 @@ a:hover {
 .btn-danger { background: var(--danger); color: #000; }
 .btn-warning { background: var(--warning); color: #000; }
 .btn-ghost {
-  background: transparent;
-  border: 1px solid var(--hairline);
-  color: var(--ink-muted);
+  background: transparent !important;
+  border: 1px solid var(--hairline) !important;
+  color: var(--ink-muted) !important;
+  font-weight: 500 !important;
 }
 
 .btn-ghost:hover {
@@ -530,16 +534,23 @@ a:hover {
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 
 .btn-icon {
-  display: inline-flex;
+  display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--hairline);
-  background: transparent;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 !important;
+  border-radius: var(--r-sm) !important;
+  border: 1px solid var(--hairline) !important;
+  background: transparent !important;
+  color: var(--ink-muted) !important;
+  font-weight: 400 !important;
   cursor: pointer;
   transition: all 0.2s var(--ease);
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .btn-icon:hover {
