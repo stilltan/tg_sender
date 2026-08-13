@@ -1,77 +1,275 @@
-# TG Sender — передача дел агенту (AGENT HANDOFF)
-> Обновлено: 2026-08-12 23:15 UTC
+# AGENT HANDOFF — TG Sender Project
+> Created: 2026-08-13
+> Status: Fully operational
 
-## Кто ты
-Ты агент, который продолжает работу над проектом **TG Sender** (бот-рассыльщик в Telegram: контакты, шаблоны, кампании, веб-дашборд). Проект развёрнут на сервере `158.160.6.22`, код — в `/opt/tg_sender`.
+---
 
-## Состояние сервера (проверено 2026-08-12, обновлено после апгрейда безопасности)
+## 1. КТО ТЫ
 
-| Что | Статус |
-|---|---|
-| Веб-дашборд `tg-sender-web` | ✅ active (uvicorn, порт **8000**, только localhost) |
-| БД `/opt/tg_sender/data/sender.db` | ✅ 218 контактов, 4 аккаунта, 1 шаблон |
-| Схема БД | ✅ мигрирована (добавлены `message_log.account_id`, `campaigns.template_id`, `campaigns.messages_per_account`, таблица `admin_log`) |
-| Пароль админа | ✅ сменён (см. `/opt/tg_sender/.admin_credentials`, права 600) |
-| Порт 8000 в интернете | ✅ **закрыт** (ufw) — доступ только с localhost |
-| Защита входа | ✅ лимит 10 неудачных попыток / 5 мин с IP + задержка 1.5 с + журнал входов |
-| Журнал действий | ✅ страница «🛡 Журнал» в дашборде (`/logs`), пишутся входы/выходы/запуски/импорты/аккаунты/пользователи |
-| Ключ сессий | ✅ `TG_SENDER_SECRET_KEY` в `.env` (сессии не сбрасываются при рестарте) |
-| noindex | ✅ дашборд и вход закрыты от индексации |
-| Бэкап БД | ✅ `/opt/tg_sender/backups/sender_20260812_2310.db.bak` |
-| Старые файлы | ✅ `web/app.py.bak_20260812`, `web/app.py.bak_20260812b`, `web/sender_engine.py.bak_20260812` |
+Ты агент, который продолжает работу над проектом **TG Sender** — система рассылки сообщений в Telegram через реальные аккаунты (не боты). Проект развёрнут на VPS, код на GitHub, веб-интерфейс работает.
 
-## Что было исправлено (автором 2026-08-12)
+---
 
-1. **Миграция схемы БД** — `web/app.py` теперь содержит `migrate_db()`, которая при старте добавляет недостающие колонки в старую БД без потери данных (SQLite не умеет `ADD COLUMN IF NOT EXISTS`, поэтому проверка через `PRAGMA table_info`). Раньше страница аккаунтов падала с `no such column: ml.account_id`, кампании не могли стартовать.
-2. **`log_message` пишет реальный `account_id`** — раньше всегда писал `0`, статистика по аккаунтам была неверной. Теперь в журнал рассылки сохраняется ID аккаунта (`web/sender_engine.py`).
-3. **API_ID / API_HASH вынесены в переменные окружения** (`TG_SENDER_API_ID`, `TG_SENDER_API_HASH`) с запасными значениями по умолчанию — теперь можно подставить свои с my.telegram.org.
-4. **Пароль по умолчанию** — больше не `admin123` при создании: берётся из `TG_SENDER_ADMIN_PASSWORD` (в `.env`). На сервере пароль уже сменён на случайный, лежит в `/opt/tg_sender/.admin_credentials` (файл 600, читай через `sudo cat`).
-5. **Убран вывод пароля в логах** при старте.
-6. **`.gitignore` дополнен** — `accounts/`, `sessions/`, `*.session`, `backups/`, `proxy.conf`, `.admin_credentials`, `uploads/*.csv` теперь не попадут в git (это секреты и личные данные!).
-7. **Добавлены тесты** — `tests/test_tg_sender.py` (13 тестов, все зелёные, см. ниже).
+## 2. ДОСТУПЫ
 
-## Апгрейд безопасности (2026-08-12, второй заход — «как в проекте I•Match»)
-
-8. **Журнал действий (аудит)** — таблица `admin_log` + `log_action()` + страница `/logs` в дашборде (пункт «🛡 Журнал» в меню). Пишутся: успешный/неудачный вход, выход, добавление/удаление аккаунта, запуск/пауза/удаление кампании, импорт контактов, добавление/удаление пользователя. С IP-адресом и временем.
-9. **Защита от перебора пароля** — `TG_SENDER_LOGIN_MAX_ATTEMPTS` (10) попыток за `TG_SENDER_LOGIN_WINDOW_SEC` (300 с) с одного IP, при неудаче задержка `TG_SENDER_LOGIN_FAIL_DELAY_SEC` (1.5 с).
-10. **IP-фильтр** — `TG_SENDER_IP_ALLOWLIST` (через запятую). Пусто = без ограничения. localhost всегда разрешён.
-11. **Ключ сессий из настроек** — `TG_SENDER_SECRET_KEY` в `.env` (сгенерирован, записан). Раньше ключ создавался заново при каждом старте → все логины слетали при рестарте.
-12. **noindex** — панель и страница входа закрыты от поисковиков.
-13. **Куки сессий** — `same_site="strict"`, срок 12 часов.
-
-## Что осталось сделать (для агента)
-
-- [ ] **Запушить изменения в git** (коммит сделан, но push — за тобой, если есть доступ): `cd /opt/tg_sender && sudo -u agent2 git push origin main`
-- [ ] **Запустить бота как службу** — сейчас запущен только веб-дашборд. Бот (`python -m bot`) в systemd отсутствует. Если нужен бот-управление — создай `tg-sender-bot.service` по образцу `tg-sender-web.service` (WorkingDirectory=/opt/tg_sender, ExecStart=/opt/tg_sender/venv/bin/python -m bot, User=agent2, Restart=always).
-- [ ] Если нужен **внешний доступ** к дашборду — настроить Caddy + basic auth (см. AGENT_CHECKLIST), НЕ открывать порт голым.
-- [ ] **Подставить свои API_ID/API_HASH** в `.env` (`TG_SENDER_API_ID`, `TG_SENDER_API_HASH`) — сейчас используются публичные демо-значения.
-- [ ] Прогнать тесты перед изменениями (13 штук, см. AGENT_CHECKLIST).
-- [ ] После завершения работы сообщить владельцу — он уберёт временный SSH-доступ (пользователь `agent2`).
-
-## Как проверить, что всё работает
-
-```bash
-# Служба
-systemctl is-active tg-sender-web            # → active
-# Страницы (только с localhost, порт закрыт снаружи)
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/login       # → 200
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/dashboard   # → 302 (редирект на login без сессии — норма)
-# Логи
-sudo journalctl -u tg-sender-web -n 30 --no-pager
+### Сервер (Yandex Cloud VPS)
+```
+IP: 158.160.6.22
+OS: Ubuntu 24.04 (Noble)
+SSH user: agent2
+SSH key: файл agent2_key (ключи лежат отдельно, не в репо)
 ```
 
-## Как попасть в веб-дашборд
+**Подключение:**
+```bash
+ssh -i ~/.ssh/agent2_key agent2@158.160.6.22
+```
 
-Порт 8000 закрыт от интернета (это осознанно — без HTTPS и авторизации дашборд наружу открывать нельзя). Два способа:
-1. **SSH-туннель** (рекомендуется): с машины разработчика
-   `ssh -L 8000:localhost:8000 agent2@158.160.6.22` → открыть `http://localhost:8000`
-2. **Через Caddy с basic auth** (если нужен внешний доступ): добавить в `/etc/caddy/Caddyfile` блок `handle_path /sender/*` → `reverse_proxy 127.0.0.1:8000` + `basic_auth`. После этого открыть порт 8000 в ufw НЕ нужно — Caddy проксирует по localhost.
+### GitHub
+```
+Repo: https://github.com/stilltan/tg_sender
+Owner: stilltan
+```
 
-Логин/пароль дашборда: `/opt/tg_sender/.admin_credentials`.
+### Веб-интерфейс
+```
+URL: http://158.160.6.22:8000
+Логин: admin
+Пароль: (см. /opt/tg_sender/.admin_credentials на сервере)
+```
 
-## Критично (не забывай)
+### Telegram Bot
+```
+Username: @FAWWWWWWWWWWWWW_bot
+Admin ID: 7627878199 (@Cursdworld)
+```
 
-- **Сессии и аккаунты — секреты**: `sessions/`, `accounts/`, `.admin_credentials`, `proxy.conf` — не коммитить, не печатать в чате.
-- **Не запускай рассылки бездумно** — это реальные сообщения реальным людям. Сначала тестовое сообщение (кнопка test в дашборде или `tools/send_test.py`), маленькая группа, маленькие задержки.
-- **Не открывай порт 8000 наружу без пароля/HTTPS.**
-- Если что-то упало — смотри `sudo journalctl -u tg-sender-web -n 50 --no-pager` и файл `web/app.py.bak_20260812` (рабочая версия до правок).
+---
+
+## 3. СОСТОЯНИЕ СЕРВЕРА
+
+### Сервисы (все работают)
+| Сервис | Порт | Назначение |
+|--------|------|------------|
+| imatch-ankety | - | I-Match бот анкет (НЕ ТРОГАТЬ) |
+| imatch-school | - | I-Match школа (НЕ ТРОГАТЬ) |
+| imatch-vitrina | - | I-Match витрина (НЕ ТРОГАТЬ) |
+| imatch-web | 8080 (localhost) | I-Match сайт (НЕ ТРОГАТЬ) |
+| **tg-sender-web** | **8000** | **Наш веб-дашборд** |
+| rustdesk | - | RustDesk (не используется) |
+| rustdesk-hbbs | 21115-21116 | RustDesk signaling (не используется) |
+| rustdesk-hbbr | 21117 | RustDesk relay (не используется) |
+
+**ВАЖНО:** Сервисы imatch-* чужие. Не трогай их. Не меняй порты. Не удаляй файлы в /opt/imatch/.
+
+### Порты (открыты в ufw)
+```
+22    - SSH
+8000  - tg-sender-web (наш)
+8080  - imatch-web (чужой, localhost only)
+8088  - tg-monitor (наш, запускается вручную)
+21115-21119 - RustDesk (не используется)
+```
+
+---
+
+## 4. ПРОЕКТ
+
+### Структура на сервере
+```
+/opt/tg_sender/
+├── web/                    # Веб-приложение (FastAPI)
+│   ├── app.py             # Основные руты
+│   ├── tg_client.py       # Telegram клиент (Telethon)
+│   ├── tg_client_routes.py# API для Telegram клиента
+│   ├── sender_engine.py   # Движок рассылки
+│   ├── antispam.py        # Защита от спама
+│   ├── spintax_engine.py  # Уникализация текстов
+│   ├── tg_monitor_web.py  # Мониторинг чатов (порт 8088)
+│   ├── templates/          # HTML шаблоны (Jinja2)
+│   └── static/styles.css  # CSS стили (Linear+Raycast dark)
+├── core/                   # Конфигурация и БД
+│   ├── config.py          # Настройки из .env
+│   └── db.py              # SQLite операции
+├── data/                   # База данных SQLite
+│   └── sender.db          # Основная БД
+├── sessions/               # Telegram сессии (.session файлы)
+├── accounts/               # TDATA папки аккаунтов
+├── .env                    # Переменные окружения
+├── proxy.conf              # MTProto прокси
+├── .admin_credentials      # Логин/пароль веб-админки
+└── tools/                  # Скрипты
+```
+
+### Структура репозитория (GitHub)
+```
+tg_sender/
+├── web/                    # Веб-приложение
+├── core/                   # Ядро
+├── tools/                  # Скрипты инструментов
+├── docs/                   # Документация
+│   └── TELEGRAM_SPAM_BYPASS.md  # Полный разбор анти-спама
+├── AGENT_HANDOFF.md        # Этот файл
+├── AGENT_CHECKLIST.md      # Чеклист для агента
+├── SECURITY_NOTES.md       # Заметки по безопасности
+├── requirements.txt        # Python зависимости
+└── .env.example            # Пример .env
+```
+
+### Технологии
+- **Backend:** Python 3.12 + FastAPI
+- **Telegram:** Telethon 1.44.0 (MTProto)
+- **БД:** SQLite
+- **Прокси:** MTProto (для Telethon) + Cloudflare Worker (для Bot API)
+- **Деплой:** systemd сервисы
+- **Дизайн:** Dark theme в стиле Linear.app + Raycast (CSS в static/styles.css)
+
+---
+
+## 5. TELEGRAM АККАУНТЫ
+
+### Данные аккаунтов
+| Телефон | Username | Имя | Статус |
+|---------|----------|-----|--------|
+| +919084101190 | @i_match_Oks | I_Match_Oksana | ✅ active |
+| +919085691621 | @i_match_Oksana | I_Match_OKSANA | ✅ active |
+| +919087271255 | @i_match_0ksana | I_Match_Oksana gart | ✅ active |
+| +919087424900 | - | Niraj K | ❌ inactive |
+
+### API для всех аккаунтов
+```
+API ID: 2040
+API Hash: b18441a1ff607e10a989891a5462e627
+```
+
+### Session файлы: `/opt/tg_sender/sessions/`
+### TDATA папки: `/opt/tg_sender/accounts/*/tdata/`
+### 2FA: None для всех (см. `/opt/tg_sender/accounts/*/twoFA.txt`)
+
+---
+
+## 6. ПРОКСИ
+
+### MTProto прокси (для Telethon)
+```
+Файл: /opt/tg_sender/proxy.conf
+Содержимое: 94.130.191.53:8443:dd104462821249bd7ac519130220c25d09
+```
+
+### Cloudflare Worker (для Bot API)
+```
+URL: https://imatch-tgproxy.stilltanvoid.workers.dev/bot
+Файл: /opt/tg_sender/.env (BOT_API_BASE_URL)
+```
+
+---
+
+## 7. БАЗА ДАННЫХ
+
+### SQLite: `/opt/tg_sender/data/sender.db`
+
+### Таблицы
+| Таблица | Назначение |
+|---------|------------|
+| `users` | Пользователи веб-интерфейса |
+| `tg_accounts` | Telegram аккаунты |
+| `contacts` | Контакты для рассылки |
+| `message_templates` | Шаблоны сообщений |
+| `campaigns` | Рассылки |
+| `message_log` | Лог отправок |
+
+### Текущие данные
+- Контактов: 51 (группа recruiters)
+- Аккаунтов: 4 (3 активных)
+- Шаблонов: 1
+
+---
+
+## 8. ОСНОВНЫЕ КОМАНДЫ
+
+```bash
+# Подключение
+ssh -i ~/.ssh/agent2_key agent2@158.160.6.22
+
+# Статус сервисов
+systemctl list-units --type=service --state=running | grep -E 'imatch|tg-sender'
+
+# Рестарт веб-дашборда
+sudo systemctl restart tg-sender-web
+
+# Логи
+sudo journalctl -u tg-sender-web -f
+
+# Запуск мониторинга (вручную)
+cd /opt/tg_sender && nohup venv/bin/python web/tg_monitor_web.py &
+
+# Проверка базы
+cd /opt/tg_sender && source venv/bin/activate
+python3 -c "from core import db; db.init_db(); print(db.get_statistics())"
+
+# Git push (из локальной папки)
+cd /home/user/tg_sender
+git add -A && git commit -m "msg" && git push origin main
+```
+
+---
+
+## 9. ИЗВЕСТНЫЕ ПРОБЛЕМЫ
+
+1. **RustDesk не подключается** — .deb версия перезаписывает конфиг. Не критично.
+2. **4-й аккаунт не авторизован** — нужна повторная авторизация через Telethon.
+3. **Telegram API заблокирован** — всё идёт через MTProto прокси.
+4. **Мониторинг на 8088** — запускается вручную, не сервис.
+
+---
+
+## 10. АНТИ-СПАМ СИСТЕМА
+
+Реализовано в `web/sender_engine.py`:
+- Spintax (`{вариант1|вариант2}`)
+- Умные задержки (2-10 мин)
+- Дневные лимиты по возрасту аккаунта
+- Нет ссылок в первом ЛС
+- Окно отправки 9:00-22:00
+- Ротация аккаунтов при flood
+
+Документация: `docs/TELEGRAM_SPAM_BYPASS.md`
+
+---
+
+## 11. ВЕБ-ИНТЕРФЕЙС
+
+### Страницы
+| Путь | Описание |
+|------|----------|
+| `/` | Редирект на дашборд |
+| `/dashboard` | Дашборд со статистикой |
+| `/accounts` | Управление Telegram аккаунтами |
+| `/contacts` | Контакты (импорт, статусы) |
+| `/templates` | Шаблоны сообщений (spintax) |
+| `/campaigns` | Рассылки |
+| `/campaigns/new` | Создание рассылки |
+| `/analytics` | Аналитика |
+| `/settings` | Настройки + управление пользователями |
+| `/tg` | **Telegram Web клиент** (просмотр чатов) |
+| `/logs` | Журнал действий |
+
+### API
+| Путь | Метод | Описание |
+|------|-------|----------|
+| `/api/tg/{phone}/dialogs` | GET | Список чатов аккаунта |
+| `/api/tg/{phone}/messages/{id}` | GET | Сообщения чата |
+| `/api/tg/{phone}/send/{id}` | POST | Отправить сообщение |
+| `/api/tg/{phone}/read/{id}` | POST | Отметить прочитанным |
+| `/export/contacts` | GET | Экспорт контактов в CSV |
+
+---
+
+## 12. ЧТО НУЖНО ДОДЕЛАТЬ
+
+1. Добавить больше контактов (сейчас 51)
+2. Создать несколько шаблонов с spintax
+3. Протестировать рассылку на малой группе
+4. Добавить SSL (HTTPS) через Caddy
+5. Сделать мониторинг сервисом systemd
+6. Авторизовать 4-й аккаунт
