@@ -43,9 +43,12 @@ static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# TG Client routes
-from tg_client_routes import router as tg_router
-app.include_router(tg_router)
+# TG Client routes (опционально — тесты копируют только app.py)
+try:
+    from tg_client_routes import router as tg_router
+    app.include_router(tg_router)
+except ImportError:
+    pass
 
 
 # ============================================================
