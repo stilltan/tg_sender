@@ -43,14 +43,6 @@ static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# TG Client routes (опционально — тесты копируют только app.py)
-try:
-    from tg_client_routes import router as tg_router
-    app.include_router(tg_router)
-except ImportError:
-    pass
-
-
 # ============================================================
 # DATABASE
 # ============================================================
@@ -198,11 +190,22 @@ def migrate_db():
     migrations = {
         "message_log": [
             ("account_id", "INTEGER"),
+            ("template_id", "INTEGER"),
+            ("replied", "INTEGER DEFAULT 0"),
         ],
         "campaigns": [
             ("template_id", "INTEGER"),
             ("messages_per_account", "INTEGER DEFAULT 20"),
             ("message_text", "TEXT DEFAULT ''"),
+            ("followup_template_id", "INTEGER"),
+            ("template_ids", "TEXT DEFAULT ''"),
+            ("flood_until", "REAL DEFAULT 0"),
+        ],
+        "tg_accounts": [
+            ("flood_until", "REAL DEFAULT 0"),
+        ],
+        "contacts": [
+            ("last_template_id", "INTEGER"),
         ],
     }
     for table, cols in migrations.items():
@@ -685,19 +688,38 @@ async def delete_contact(request: Request, contact_id: int):
 # ============================================================
 
 @app.get("/templates", response_class=HTMLResponse)
-async def templates_page(request: Request):
+async def templates_page(request: Request, saved: int = 0, warn: int = 0):
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
-    
+
+    from sender_engine import check_first_message
     conn = get_db()
-    tmpls = conn.execute("SELECT * FROM message_templates ORDER BY created_at DESC").fetchall()
+    tmpls = conn.execute("SELECT * FROM message_templates ORDER BY id ASC").fetchall()
     conn.close()
-    
+
+    rows = []
+    for t in tmpls:
+        d = dict(t)
+        name = (d.get("name") or "")
+        follow = "follow-up" in name.lower() or "2-е" in name.lower() or "второе" in name.lower()
+        d["is_followup"] = follow
+        d["char_count"] = len(d.get("text") or "")
+        if follow:
+            d["safe"] = True
+            d["safe_reason"] = "follow-up: ссылка разрешена"
+        else:
+            ok, reason = check_first_message(d.get("text") or "")
+            d["safe"] = ok
+            d["safe_reason"] = reason
+        rows.append(d)
+
     return templates.TemplateResponse("templates.html", {
         "request": request,
         "user": user,
-        "templates": [dict(t) for t in tmpls],
+        "templates": rows,
+        "saved_id": saved,
+        "saved_warn": bool(warn),
     })
 
 @app.post("/templates/add")
@@ -709,9 +731,42 @@ async def add_template(request: Request, name: str = Form(...), text: str = Form
     conn = get_db()
     conn.execute("INSERT INTO message_templates (name, text) VALUES (?, ?)", (name, text))
     conn.commit()
+    tid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
-    
-    return RedirectResponse(url="/templates", status_code=302)
+    log_action(user.get("username") or "", "template_add", name[:80], client_ip(request))
+    from sender_engine import check_first_message
+    follow = "follow-up" in name.lower()
+    warn = 0
+    if not follow:
+        ok, _ = check_first_message(text)
+        if not ok:
+            warn = 1
+    return RedirectResponse(url=f"/templates?saved={tid}&warn={warn}", status_code=302)
+
+@app.post("/templates/{template_id}/save")
+async def save_template(request: Request, template_id: int, name: str = Form(...), text: str = Form(...)):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    from sender_engine import check_first_message
+    is_followup = "follow-up" in name.lower() or "2-е" in name.lower() or "второе" in name.lower()
+    warn = ""
+    if not is_followup:
+        ok, reason = check_first_message(text)
+        if not ok:
+            warn = reason
+            # всё равно сохраняем — чтобы не резать текст; рассылка первое ЛС сама отклонит
+    conn = get_db()
+    conn.execute("UPDATE message_templates SET name = ?, text = ? WHERE id = ?", (name.strip(), text, template_id))
+    conn.commit()
+    conn.close()
+    log_action(user.get("username") or "", "template_edit", f"#{template_id}", client_ip(request))
+    q = f"?saved={template_id}"
+    if warn:
+        q += "&warn=1"
+    return RedirectResponse(url="/templates" + q, status_code=302)
+
 
 @app.post("/templates/{template_id}/delete")
 async def delete_template(request: Request, template_id: int):
@@ -765,31 +820,47 @@ async def new_campaign_page(request: Request):
     })
 
 @app.post("/campaigns/create")
-async def create_campaign(
-    request: Request,
-    name: str = Form(...),
-    template_id: int = Form(...),
-    contact_group: str = Form("all"),
-    delay_min: int = Form(30),
-    delay_max: int = Form(60),
-    messages_per_account: int = Form(20),
-):
+async def create_campaign(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
-    
+    form = await request.form()
+    name = str(form.get("name") or "").strip() or "Рассылка"
+    contact_group = str(form.get("contact_group") or "all")
+    delay_min = int(form.get("delay_min") or 30)
+    delay_max = int(form.get("delay_max") or 60)
+    messages_per_account = int(form.get("messages_per_account") or 20)
+    try:
+        followup_template_id = int(form.get("followup_template_id") or 0) or None
+    except (TypeError, ValueError):
+        followup_template_id = None
+    ids = []
+    for x in form.getlist("template_ids"):
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            pass
+    if not ids and form.get("template_id"):
+        try:
+            ids = [int(form.get("template_id"))]
+        except (TypeError, ValueError):
+            ids = []
+    if not ids:
+        return RedirectResponse(url="/campaigns/new?err=tmpl", status_code=302)
+    template_id = ids[0]
+    ids_csv = ",".join(str(i) for i in ids)
     conn = get_db()
-    # Get message text from template
-    tmpl = conn.execute('SELECT text FROM message_templates WHERE id = ?', (template_id,)).fetchone()
-    message_text = tmpl['text'] if tmpl else ''
+    tmpl = conn.execute("SELECT text FROM message_templates WHERE id = ?", (template_id,)).fetchone()
+    message_text = tmpl["text"] if tmpl else ""
     conn.execute(
-        """INSERT INTO campaigns (name, message_text, template_id, contact_group, delay_min, delay_max, messages_per_account)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (name, message_text, template_id, contact_group, delay_min, delay_max, messages_per_account)
+        """INSERT INTO campaigns (name, message_text, template_id, contact_group, delay_min, delay_max,
+           messages_per_account, followup_template_id, template_ids)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (name, message_text, template_id, contact_group, delay_min, delay_max,
+         messages_per_account, followup_template_id, ids_csv),
     )
     conn.commit()
     conn.close()
-    
     return RedirectResponse(url="/campaigns", status_code=302)
 
 @app.post("/campaigns/{campaign_id}/start")
@@ -873,6 +944,26 @@ async def analytics_page(request: Request):
         FROM tg_accounts a
     """).fetchall()
     
+    script_stats = conn.execute(
+        """SELECT ml.template_id,
+                  COALESCE(t.name, 'без шаблона') AS template_name,
+                  SUM(CASE WHEN ml.status='sent' THEN 1 ELSE 0 END) AS sent,
+                  SUM(CASE WHEN ml.status='followup' THEN 1 ELSE 0 END) AS followup,
+                  SUM(CASE WHEN COALESCE(ml.replied,0)=1 THEN 1 ELSE 0 END) AS replied
+           FROM message_log ml
+           LEFT JOIN message_templates t ON t.id = ml.template_id
+           WHERE ml.template_id IS NOT NULL
+           GROUP BY ml.template_id
+           ORDER BY sent DESC"""
+    ).fetchall()
+    recent = conn.execute(
+        """SELECT ml.contact_username, ml.status, ml.sent_at, ml.replied, ml.template_id,
+                  COALESCE(t.name, '') AS template_name
+           FROM message_log ml
+           LEFT JOIN message_templates t ON t.id = ml.template_id
+           WHERE ml.status IN ('sent','followup')
+           ORDER BY ml.id DESC LIMIT 80"""
+    ).fetchall()
     conn.close()
     
     return templates.TemplateResponse("analytics.html", {
@@ -880,6 +971,8 @@ async def analytics_page(request: Request):
         "user": user,
         "daily_stats": daily_stats,
         "accounts": [dict(a) for a in accounts],
+        "script_stats": [dict(s) for s in script_stats],
+        "recent": [dict(r) for r in recent],
     })
 
 # ============================================================
@@ -978,29 +1071,59 @@ async def test_send(
 # ============================================================
 
 @app.get("/monitor", response_class=HTMLResponse)
-async def monitor_page(request: Request, phone: str = None):
+async def monitor_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
-    
+    import time
     conn = get_db()
-    accounts = conn.execute("SELECT * FROM tg_accounts WHERE status = 'active'").fetchall()
+    accounts = [dict(a) for a in conn.execute("SELECT * FROM tg_accounts ORDER BY id").fetchall()]
+    now = time.time()
+    cards = []
+    for a in accounts:
+        aid = a["id"]
+        sent = conn.execute(
+            "SELECT COUNT(*) FROM message_log WHERE account_id=? AND status='sent'", (aid,)
+        ).fetchone()[0]
+        today = conn.execute(
+            "SELECT COUNT(*) FROM message_log WHERE account_id=? AND status='sent' AND date(sent_at)=date('now')",
+            (aid,),
+        ).fetchone()[0]
+        follow = conn.execute(
+            "SELECT COUNT(*) FROM message_log WHERE account_id=? AND status='followup'", (aid,)
+        ).fetchone()[0]
+        floods = conn.execute(
+            "SELECT COUNT(*) FROM message_log WHERE account_id=? AND status='flood_wait'", (aid,)
+        ).fetchone()[0]
+        replies = conn.execute(
+            "SELECT COUNT(*) FROM message_log WHERE account_id=? AND COALESCE(replied,0)=1", (aid,)
+        ).fetchone()[0]
+        last = conn.execute(
+            """SELECT contact_username, status, error_message, template_id, sent_at
+               FROM message_log WHERE account_id=? ORDER BY id DESC LIMIT 12""",
+            (aid,),
+        ).fetchall()
+        until = float(a.get("flood_until") or 0)
+        flood_left = int(until - now) if until > now else 0
+        cards.append({
+            **a,
+            "sent": sent,
+            "today": today,
+            "follow": follow,
+            "floods": floods,
+            "replies": replies,
+            "flood_left": flood_left,
+            "logs": [dict(x) for x in last],
+        })
     conn.close()
-    
     return templates.TemplateResponse("monitor.html", {
-        "request": request,
-        "user": user,
-        "accounts": [dict(a) for a in accounts],
-        "selected_phone": None,
-        "chats": None,
-        "chat_messages": None,
-        "chat_username": None,
-        "active": "monitor",
+        "request": request, "user": user, "active": "monitor", "cards": cards,
     })
 
 
 @app.get("/monitor/{phone}", response_class=HTMLResponse)
 async def monitor_account(request: Request, phone: str):
+    return RedirectResponse(url="/monitor", status_code=302)
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)

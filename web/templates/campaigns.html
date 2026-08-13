@@ -11,7 +11,8 @@
         <tbody>
         {% for c in campaigns %}
         <tr>
-            <td><strong>{{ c.name }}</strong></td>
+            <td><a href="/campaigns/{{ c.id }}"><strong>{{ c.name }}</strong></a>
+                <div style="font-size:11px;color:var(--ink-tertiary)">скрипты {{ c.template_ids or c.template_id }}</div></td>
             <td><span class="badge {{ c.status }}">{{ c.status }}</span></td>
             <td><div class="progress" style="width:80px"><div class="bar" style="width:{{ (c.sent_count / c.total_contacts * 100) if c.total_contacts > 0 else 0 }}%"></div></div><small>{{ c.sent_count }}/{{ c.total_contacts }}</small></td>
             <td>{{ c.sent_count }}</td>

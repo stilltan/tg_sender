@@ -3,60 +3,66 @@
 {% block title %}TG Sender — Шаблоны{% endblock %}
 {% block header %}Шаблоны <span style="color:var(--ink-tertiary);font-size:14px;font-weight:400">({{ templates|length }})</span>{% endblock %}
 {% block content %}
+{% if saved_id %}
+<div class="card" style="border-color:{% if saved_warn %}var(--warning){% else %}var(--success){% endif %}">
+    {% if saved_warn %}
+    Сохранено №{{ saved_id }}, но антиспам для первого ЛС ругается — рассылка это первое сообщение пропустит. Подправьте текст или используйте как 2-е.
+    {% else %}
+    Шаблон №{{ saved_id }} сохранён.
+    {% endif %}
+</div>
+{% endif %}
+
 <div class="card">
     <h2>Новый шаблон</h2>
     <form method="POST" action="/templates/add">
         <div class="form-group"><label>Название</label><input type="text" name="name" placeholder="Приветствие рекрутеру" required></div>
         <div class="form-group">
-            <label>Текст сообщения (поддерживает spintax)</label>
-            <textarea name="text" rows="6" placeholder="{Привет|Здравствуйте|Добрый день}, {name}! {Вижу|Заметил}, что ты {работаешь|специализируешься} в {HR|рекрутинге}..." required></textarea>
+            <label>Текст сообщения</label>
+            <textarea name="text" rows="6" required></textarea>
             <div style="margin-top:8px;padding:12px;background:var(--surface-2);border-radius:var(--r-sm);font-size:12px;color:var(--ink-subtle)">
-                <strong>Переменные:</strong> <code>{name}</code> — имя, <code>{username}</code> — юзернейм<br>
-                <strong>Spintax:</strong> <code>{вариант1|вариант2|вариант3}</code> — случайный выбор<br>
-                <strong>Пример:</strong> <code>{Привет|Здравствуй}, {name}! {Вижу|Заметил}, что ты {HR|рекрутер}.</code>
+                Первое ЛС: без ссылок, до 500 символов, без спам-слов. Ссылку на канал — только в follow-up (в названии напишите follow-up).
             </div>
         </div>
-        <button type="submit" class="btn btn-primary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-            Создать
-        </button>
+        <button type="submit" class="btn btn-primary">Создать</button>
     </form>
 </div>
 
 <div class="card" style="border-color:var(--accent-soft)">
-    <h2 style="color:var(--accent)">🛡 Защита от спама (активна)</h2>
+    <h2 style="color:var(--accent)">Антиспам при сохранении и рассылке</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;color:var(--ink-subtle)">
-        <div>✅ Spintax — уникализация текста</div>
-        <div>✅ Умные задержки 2-10 мин</div>
-        <div>✅ Дневные лимиты по возрасту</div>
-        <div>✅ Нет ссылок в первом ЛС</div>
-        <div>✅ Ротация аккаунтов при флуде</div>
-        <div>✅ Окно отправки 9:00-22:00</div>
+        <div>Нет http / t.me в первом ЛС</div>
+        <div>Макс 500 символов в первом ЛС</div>
+        <div>Стоп-слова: заработок, акция, крипто…</div>
+        <div>Без CAPS-спама</div>
+        <div>Follow-up со ссылкой — отдельно</div>
+        <div>Окно 9:00–22:00, лимиты, задержки</div>
     </div>
 </div>
 
 {% for t in templates %}
-<div class="card template-item">
-    <div style="display:flex;justify-content:space-between;align-items:start">
-        <h3 style="margin-bottom:8px">{{ t.name }}</h3>
-        <form method="POST" action="/templates/{{ t.id }}/delete" onsubmit="return confirm('Удалить шаблон?')">
-            <button type="submit" class="btn-icon" title="Удалить">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-            </button>
-        </form>
-    </div>
-    <div class="text">{{ t.text }}</div>
-    <div style="font-size:11px;color:var(--ink-tertiary);margin-top:8px">
-        {% if '{' in t.text %}✅ Spintax активен{% else %}⚠️ Нет spintax — добавьте вариации для уникальности{% endif %}
-    </div>
+<div class="card template-item" id="t{{ t.id }}">
+    <form method="POST" action="/templates/{{ t.id }}/save">
+        <div class="form-group">
+            <label>Название</label>
+            <input type="text" name="name" value="{{ t.name }}" required>
+        </div>
+        <div class="form-group">
+            <label>Текст ({{ t.char_count }} символов)</label>
+            <textarea name="text" rows="12" required style="white-space:pre-wrap;min-height:220px">{{ t.text }}</textarea>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="font-size:13px;color:{% if t.safe %}var(--success){% else %}var(--warning){% endif %}">
+                {% if t.safe %}Первое ЛС: ок — {{ t.safe_reason }}{% else %}Первое ЛС: {{ t.safe_reason }}{% endif %}
+            </div>
+            <div style="display:flex;gap:8px">
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </div>
+    </form>
+    <form method="POST" action="/templates/{{ t.id }}/delete" onsubmit="return confirm('Удалить шаблон?')" style="margin-top:10px">
+        <button type="submit" class="btn btn-ghost btn-sm">Удалить</button>
+    </form>
 </div>
 {% endfor %}
-
-{% if not templates %}
-<div class="card" style="text-align:center;color:var(--ink-tertiary);padding:60px">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom:16px;opacity:0.3"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
-    <p>Пока нет шаблонов</p>
-    <p style="font-size:13px;margin-top:8px">Создайте шаблон с spintax для уникальных сообщений</p>
-</div>
-{% endif %}
 {% endblock %}

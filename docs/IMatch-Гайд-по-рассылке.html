@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>I•Match — гайд по рассылке рекрутерам</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0a0a10">
+<style>
+  :root{
+    --radius-3:8px; --radius-4:12px; --radius-5:16px; --radius-6:24px; --radius-10:999px;
+    --shadow-3:0 10px 15px -3px rgb(0 0 0 / .28),0 4px 6px -4px rgb(0 0 0 / .16);
+    --shadow-4:0 24px 38px 3px rgb(0 0 0 / .22);
+    --ease-4:cubic-bezier(.25,0,.2,1);
+    --canvas:#0a0a10; --surface:#10101a; --surface-2:#151522; --surface-3:#1b1b2c;
+    --hairline:#26263a; --ink:#f4f3fb; --mute:#a09cb8;
+    --accent:#6d5efc; --accent-2:#5e6ad2; --accent-hover:#8f83ff;
+    --accent-glow:rgba(109,94,252,.42);
+    --green:#59d499; --gold:#ffc65c; --rose:#ff4d6d;
+    --grad-brand:linear-gradient(135deg,#6d5efc 0%,#5e6ad2 45%,#ff4d6d 130%);
+    --grad-text:linear-gradient(100deg,#f4f3fb 15%,#8f83ff 55%,#ff7d98 90%);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;
+    color:var(--ink);line-height:1.6;background:
+      radial-gradient(1100px 600px at 88% -10%, rgba(109,94,252,.22), transparent 60%),
+      radial-gradient(900px 540px at -10% 22%, rgba(255,77,109,.12), transparent 55%),
+      var(--canvas);
+  }
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;
+    background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+    background-size:56px 56px;
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:0 22px 80px;position:relative;z-index:1}
+  .i{width:1em;height:1em;display:inline-block;vertical-align:-.14em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  header{padding:72px 0 28px;text-align:center}
+  .logo{display:inline-flex;align-items:center;gap:14px;margin-bottom:20px}
+  .logo-mark{
+    width:52px;height:52px;border-radius:var(--radius-5);display:grid;place-items:center;
+    background:var(--grad-brand);font-weight:800;font-size:20px;letter-spacing:-1px;
+    box-shadow:var(--shadow-4),0 0 40px -6px var(--accent-glow);
+  }
+  .logo-name{font-size:28px;font-weight:700;letter-spacing:-1px}
+  .logo-name em{font-style:normal;color:var(--accent-hover)}
+  .eyebrow{
+    display:inline-flex;gap:8px;padding:7px 14px;border-radius:var(--radius-10);
+    border:1px solid var(--hairline);background:rgba(21,21,34,.7);
+    font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--mute);font-weight:600;
+  }
+  h1{font-size:clamp(28px,5vw,44px);font-weight:800;letter-spacing:-1.8px;line-height:1.1;margin:18px 0 12px}
+  .grad{background:var(--grad-text);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{color:var(--mute);font-size:17px;max-width:640px;margin:0 auto}
+  nav.toc{
+    display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:28px 0 8px;
+  }
+  nav.toc a{
+    color:var(--mute);text-decoration:none;font-size:13px;padding:6px 12px;border-radius:var(--radius-10);
+    border:1px solid var(--hairline);
+  }
+  nav.toc a:hover{color:var(--ink);border-color:var(--accent)}
+  section{margin:36px 0}
+  h2{font-size:22px;letter-spacing:-.6px;margin:0 0 14px}
+  h3{font-size:16px;margin:18px 0 8px;color:#ddd}
+  .card{
+    background:linear-gradient(180deg,var(--surface-3),var(--surface));
+    border:1px solid var(--hairline);border-radius:var(--radius-6);padding:22px 22px;
+    margin:12px 0;
+  }
+  p,li{color:var(--mute)}
+  ul,ol{padding-left:20px}
+  li{margin:6px 0}
+  strong{color:var(--ink);font-weight:600}
+  a{color:var(--accent-hover)}
+  code,kbd{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.9em;background:var(--surface-2);border:1px solid var(--hairline);
+    padding:1px 6px;border-radius:6px;color:#ddd;
+  }
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--hairline);color:var(--mute)}
+  th{color:var(--ink);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .ok{color:var(--green)} .warn{color:var(--gold)} .bad{color:var(--rose)}
+  .note{font-size:13px;border-left:3px solid var(--accent);padding:8px 12px;margin-top:10px}
+  footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--hairline);color:var(--mute);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <div class="logo-mark">I•M</div>
+      <div class="logo-name">I<em>•</em>Match</div>
+    </div>
+    <div class="eyebrow">Гайд · рассылка рекрутерам</div>
+    <h1>Как писать HR<br><span class="grad">про профессию матчмейкера</span></h1>
+    <p class="lead">Короткая инструкция к панели рассылки: что нажимать, какие скрипты ставить, как не спалить аккаунты и куда смотреть ответы.</p>
+    <nav class="toc">
+      <a href="#what">Зачем</a>
+      <a href="#enter">Вход</a>
+      <a href="#pages">Разделы</a>
+      <a href="#scripts">Скрипты</a>
+      <a href="#run">Запуск</a>
+      <a href="#rules">Правила</a>
+      <a href="#monitor">Мониторинг</a>
+    </nav>
+  </header>
+
+  <section id="what">
+    <h2>1. Зачем это</h2>
+    <div class="card">
+      <p>Панель нужна, чтобы аккуратно писать <strong>рекрутерам в Telegram</strong> и предлагать направление I•Match: матчмейкинг / «рекрутер для брака». Это не спам-бот. Письма уходят с <strong>живых аккаунтов</strong> (Оксана), тексты чередуются, ссылка на канал — только вторым сообщением.</p>
+      <p class="note">Сайт анкет, школа и витрина I•Match живут отдельно. Эту панель не путать с ними и не менять чужие сервисы на сервере.</p>
+    </div>
+  </section>
+
+  <section id="enter">
+    <h2>2. Как открыть панель</h2>
+    <div class="card">
+      <p>Адрес: <a href="http://158.160.6.22:8000">http://158.160.6.22:8000</a></p>
+      <ul>
+        <li>Логин: <code>admin</code></li>
+        <li>Пароль — у владельца проекта (не публикуем в гайде).</li>
+      </ul>
+      <p>После входа — тёмное меню слева. Если сессия слетела, войдите снова.</p>
+    </div>
+  </section>
+
+  <section id="pages">
+    <h2>3. Разделы меню</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Раздел</th><th>Зачем</th></tr></thead>
+        <tbody>
+          <tr><td>Дашборд</td><td>Сводка: контакты, аккаунты, рассылки</td></tr>
+          <tr><td>Аккаунты</td><td>Три рабочих номера Оксаны. Четвёртый пока не авторизован</td></tr>
+          <tr><td>Контакты</td><td>База HR. Группы: <code>recruiters</code> (люди), <code>default</code> (тест), <code>hr_chats</code> (живые чаты)</td></tr>
+          <tr><td>Шаблоны</td><td>Скрипты №1–10 (первое ЛС) и №11 (ссылка вторым сообщением). Можно править и сохранить</td></tr>
+          <tr><td>Рассылки</td><td>Создать / запустить / пауза. Клик по названию — кому какой скрипт ушёл</td></tr>
+          <tr><td>Мониторинг</td><td>По каждому номеру: отправил, флуд, ошибка, ответы</td></tr>
+          <tr><td>Аналитика</td><td>Какой номер скрипта чаще уходит и на какой отвечают</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="scripts">
+    <h2>4. Скрипты</h2>
+    <div class="card">
+      <p>Это те тексты, которыми уже писали HR вручную. В первом сообщении <strong>нет ссылки</strong> (так безопаснее). Ссылка на канал — шаблон <strong>№11</strong>, уходит через 2–6 минут вторым ЛС.</p>
+      <table>
+        <thead><tr><th>№</th><th>О чём</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>HR-логика / рекрутер для брака</td></tr>
+          <tr><td>2</td><td>Системный матчмейкинг</td></tr>
+          <tr><td>3</td><td>Узнаваемое для HR</td></tr>
+          <tr><td>4</td><td>Новая онлайн-ниша</td></tr>
+          <tr><td>5</td><td>Живой отклик</td></tr>
+          <tr><td>6</td><td>Человек и человек</td></tr>
+          <tr><td>7</td><td>Разные миры, похожая логика</td></tr>
+          <tr><td>8</td><td>Частная практика HR</td></tr>
+          <tr><td>9</td><td>Совместимость и отбор</td></tr>
+          <tr><td>10</td><td>Навыки, которые HR уже умеет</td></tr>
+          <tr><td>11</td><td>Follow-up: ссылка на канал (только 2-е)</td></tr>
+        </tbody>
+      </table>
+      <p class="note">В рассылке галочками отмечают несколько номеров (обычно 2, 5, 7, 8, 9, 10). Панель <strong>сама выбирает случайный</strong>, но не ставит один и тот же два раза подряд.</p>
+    </div>
+  </section>
+
+  <section id="run">
+    <h2>5. Как запустить рассылку</h2>
+    <div class="card">
+      <ol>
+        <li>Контакты → нужная группа (для боя — <code>recruiters</code>, не «все» сразу).</li>
+        <li>Рассылки → <strong>Новая</strong>.</li>
+        <li>Отметить скрипты первого ЛС.</li>
+        <li>Второе сообщение — №11 (ссылка) или «не отправлять».</li>
+        <li>Группа контактов — <code>recruiters</code> или маленькая тестовая.</li>
+        <li><strong>Пауза в секундах</strong> (не минутах):
+          <ul>
+            <li>до 120 сек — тест, шлёт даже ночью;</li>
+            <li>от 180 сек и выше — боевой режим: умные паузы и окно 9:00–22:00.</li>
+          </ul>
+        </li>
+        <li>Создать → в списке нажать ▶ Запустить.</li>
+      </ol>
+      <p>Прогресс: «отправлено / всего». Клик по названию — журнал: кому ушёл какой номер скрипта.</p>
+    </div>
+  </section>
+
+  <section id="rules">
+    <h2>6. Правила, чтобы не словить бан</h2>
+    <div class="card">
+      <ul>
+        <li>Первое ЛС без <code>http</code> / <code>t.me</code>, короче 500 символов.</li>
+        <li>Не писать всем 300+ людям за день. Начните с 10–15.</li>
+        <li>Если номер во <strong>флуде</strong> — панель сама берёт следующий аккаунт.</li>
+        <li>Новые индийские аккаунты часто падают в «Запросы на переписку» у собеседника.</li>
+        <li>Не ставить 10 секунд на боевую базу — это только для проверки на двух своих никах.</li>
+        <li>Кому уже написали в этой кампании — повторно не пишут.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="monitor">
+    <h2>7. Мониторинг и аккаунты</h2>
+    <div class="card">
+      <p>Рабочие номера (Оксана): три активных. Четвёртый пока выключен.</p>
+      <p>В <strong>Мониторинге</strong> по каждому номеру:</p>
+      <ul>
+        <li>во флуде или нет (и сколько секунд осталось);</li>
+        <li>сколько ЛС сегодня;</li>
+        <li>лента: кому писал, скрипт, отправил / флуд / ошибка.</li>
+      </ul>
+      <p>Аналитика собирает, какой скрипт чаще уходит и на какой приходят ответы (когда ответы начнут отмечаться).</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>8. База контактов сейчас</h2>
+    <div class="card">
+      <ul>
+        <li><code>recruiters</code> — живые HR, которым предлагают профессию (~300 человек).</li>
+        <li><code>default</code> — тестовые ники (свои).</li>
+        <li><code>hr_chats</code> — живые чаты, куда можно постнуть (не витринные каналы вроде WTF_HR).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>9. Чего не делать</h2>
+    <div class="card">
+      <ul>
+        <li>Не открывать пароль панели в чатах и не светить его в файлах.</li>
+        <li>Не трогать сервисы I•Match на том же сервере (сайт, анкеты, школа, витрина).</li>
+        <li>Не слать ссылку первым сообщением — движок такое первое ЛС отбракует.</li>
+        <li>Не ждать ответа в панели «как в Telegram» — веб-клиент убран специально.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    I•Match · гайд по рассылке · без публикации паролей · 2026
+  </footer>
+</div>
+</body>
+</html>

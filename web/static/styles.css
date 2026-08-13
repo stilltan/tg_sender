@@ -379,6 +379,37 @@ a:hover {
   opacity: 1;
 }
 
+/* Telegram brand nav — Simple Icons, no CDN */
+.sidebar nav a.nav-tg {
+  position: relative;
+}
+.sidebar nav a.nav-tg .tg-brand {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: #229ED9;
+  color: #fff;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px rgba(34,158,217,.35), 0 6px 16px rgba(34,158,217,.28);
+}
+.sidebar nav a.nav-tg .tg-brand svg {
+  opacity: 1;
+  width: 13px;
+  height: 13px;
+}
+.sidebar nav a.nav-tg:hover .tg-brand,
+.sidebar nav a.nav-tg.active .tg-brand {
+  background: #2AABEE;
+  box-shadow: 0 0 0 1px rgba(42,171,238,.5), 0 8px 20px rgba(34,158,217,.4);
+}
+.sidebar nav a.nav-tg.active {
+  background: rgba(34,158,217,0.14);
+  color: #7dd3fc;
+  border-color: rgba(34,158,217,0.35);
+}
+
 /* ===== cards ===== */
 .card {
   background: var(--surface-glass);

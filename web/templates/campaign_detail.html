@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set active = "campaigns" %}
+{% block title %}Рассылка — {{ campaign.name }}{% endblock %}
+{% block header %}{{ campaign.name }}{% endblock %}
+{% block header_right %}<a href="/campaigns" class="btn btn-ghost">К списку</a>{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="info-row"><span class="info-label">Статус</span><span class="badge {{ campaign.status }}">{{ campaign.status }}</span></div>
+    <div class="info-row"><span class="info-label">Скрипты по кругу</span><span class="info-value">{{ campaign.template_ids or campaign.template_id }}</span></div>
+    <div class="info-row"><span class="info-label">Отправлено / всего</span><span class="info-value">{{ campaign.sent_count }} / {{ campaign.total_contacts }}</span></div>
+</div>
+<div class="card">
+    <h2>Какой скрипт лучше заходит</h2>
+    {% if stats %}
+    <table>
+        <thead><tr><th>Скрипт</th><th>Первых ЛС</th><th>Follow-up</th><th>Ответили</th><th>Отклик</th></tr></thead>
+        <tbody>
+        {% for s in stats %}
+        <tr>
+            <td>№{{ s.template_id }} · {{ s.template_name }}</td>
+            <td>{{ s.sent or 0 }}</td>
+            <td>{{ s.followup or 0 }}</td>
+            <td>{{ s.replied or 0 }}</td>
+            <td>{% if s.sent %}{{ ((s.replied or 0) / s.sent * 100)|round(0)|int }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--ink-tertiary)">Пока нет отправок с номером скрипта.</p>
+    {% endif %}
+</div>
+<div class="card">
+    <h2>Кому что ушло</h2>
+    <table>
+        <thead><tr><th>Контакт</th><th>Скрипт</th><th>Статус</th><th>Ответ</th><th>Когда</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+        <tr>
+            <td>@{{ r.contact_username }}</td>
+            <td>{% if r.template_id %}№{{ r.template_id }} {{ r.template_name or '' }}{% else %}—{% endif %}</td>
+            <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
+            <td>{% if r.replied %}да{% else %}—{% endif %}</td>
+            <td style="font-size:12px;color:var(--ink-tertiary)">{{ r.sent_at }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
